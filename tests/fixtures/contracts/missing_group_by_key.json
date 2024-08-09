@@ -1,0 +1,13 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "test-tenant",
+    "streamType": "live"
+  },
+  "fileDefinitions": {
+    "patient": {
+      "fileType": "csv",
+      "resourceType": "Patient"
+    }
+  }
+}

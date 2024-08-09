@@ -1,0 +1,8 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "",
+    "streamType": "live"
+  },
+  "fileDefinitions": {}
+}

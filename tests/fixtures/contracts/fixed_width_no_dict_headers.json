@@ -1,0 +1,15 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "test-tenant",
+    "streamType": "live"
+  },
+  "fileDefinitions": {
+    "encounter": {
+      "fileType": "fixed-width",
+      "resourceType": "Encounter",
+      "groupByKey": "encounterNumber",
+      "headers": ["col1", "col2"]
+    }
+  }
+}

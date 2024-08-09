@@ -1,0 +1,20 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "test-tenant",
+    "streamType": "live"
+  },
+  "fileDefinitions": {
+    "patient": {
+      "fileType": "csv",
+      "resourceType": "Patient",
+      "groupByKey": "patientInternalId",
+      "tasks": [
+        {
+          "task": "unknown_task",
+          "param": "value"
+        }
+      ]
+    }
+  }
+}
