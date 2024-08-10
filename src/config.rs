@@ -34,9 +34,11 @@ pub fn config() -> &'static Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::env;
 
     #[test]
+    #[serial]
     fn test_default_config() {
         env::remove_var("CSV_BUFFER_SIZE");
         env::remove_var("MAPPING_CONFIG_DIRECTORY");
@@ -49,6 +51,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_env_override() {
         env::set_var("CSV_BUFFER_SIZE", "500");
         env::set_var("MAPPING_CONFIG_DIRECTORY", "/custom/config");
