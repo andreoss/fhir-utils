@@ -1,8 +1,8 @@
 mod config;
 mod contract;
 mod error;
+mod integration_tests;
 mod lookup;
-mod tests;
 
 pub use config::Config;
 pub use contract::{Contract, FileDefinition, General};
