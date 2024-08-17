@@ -11,11 +11,21 @@ pub fn build_default_task_chain(
     file_path: &str,
     config_resource_type: &str,
 ) -> Vec<crate::contract::Task> {
+    build_default_task_chain_with_start(general, file_def, file_path, config_resource_type, 1)
+}
+
+pub fn build_default_task_chain_with_start(
+    general: &General,
+    file_def: &FileDefinition,
+    file_path: &str,
+    config_resource_type: &str,
+    starting_row_num: usize,
+) -> Vec<crate::contract::Task> {
     let mut tasks = Vec::new();
 
     tasks.push(crate::contract::Task {
         task: "add_row_num".into(),
-        params: HashMap::from([("starting_index".into(), json!(1))]),
+        params: HashMap::from([("starting_index".into(), json!(starting_row_num))]),
     });
 
     tasks.push(crate::contract::Task {

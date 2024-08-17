@@ -1,9 +1,10 @@
 use crate::contract::{FileDefinition, FileType, HeaderDict, Headers, SkipRows};
 use crate::error::Error;
+use crate::streaming::ChunkedReader;
 use csv::ReaderBuilder;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -72,110 +73,26 @@ pub fn read_delimited<R: Read + Seek>(
     reader: &mut R,
     params: &ReaderParams,
 ) -> Result<RecordBatch, Error> {
-    let mut batch = RecordBatch::new();
-
-    let skip_rows = resolve_skip_rows(&params.skiprows)?;
-    let headers = resolve_headers(reader, params)?;
-    let has_explicit_headers = params.headers.is_some();
-
-    reader.seek(SeekFrom::Start(0))?;
-    let mut csv_reader = ReaderBuilder::new()
-        .delimiter(params.value_delimiter as u8)
-        .has_headers(false)
-        .flexible(true)
-        .from_reader(reader);
-
-    let mut row_index = 0;
-    for result in csv_reader.records() {
-        let record = result?;
-
-        if !has_explicit_headers && row_index == 0 {
-            row_index += 1;
-            continue;
-        }
-
-        if skip_rows.contains(&row_index) {
-            row_index += 1;
-            continue;
-        }
-
-        let mut row_map = HashMap::new();
-        for (i, header) in headers.iter().enumerate() {
-            let value = if i < record.len() {
-                let v = record.get(i).unwrap_or("");
-                if v.is_empty()
-                    || params
-                        .empty_field_values
-                        .as_ref()
-                        .is_some_and(|ev| ev.contains(&v.to_string()))
-                {
-                    None
-                } else {
-                    Some(v.to_string())
-                }
-            } else {
-                None
-            };
-            row_map.insert(header.clone(), value);
-        }
-        batch.add_row(row_map);
-        row_index += 1;
-    }
-
-    Ok(batch)
+    let mut params = params.clone();
+    params.file_type = FileType::Csv;
+    read_all(reader, &params)
 }
 
 pub fn read_fixed_width<R: Read + Seek>(
     reader: &mut R,
     params: &ReaderParams,
 ) -> Result<RecordBatch, Error> {
-    let mut batch = RecordBatch::new();
+    let mut params = params.clone();
+    params.file_type = FileType::FixedWidth;
+    read_all(reader, &params)
+}
 
-    let skip_rows = resolve_skip_rows(&params.skiprows)?;
-    let headers = resolve_fixed_width_headers(&params.headers)?;
-
-    let mut buf_reader = BufReader::new(reader);
-    let mut line = String::new();
-    let mut row_index = 0;
-
-    while buf_reader.read_line(&mut line)? > 0 {
-        let trimmed = line.trim_end_matches('\n');
-
-        if skip_rows.contains(&row_index) {
-            row_index += 1;
-            line.clear();
-            continue;
-        }
-
-        let mut row_map = HashMap::new();
-        let mut pos = 0;
-        for header in &headers {
-            let width = header.width;
-            let value = if pos < trimmed.len() {
-                let end = (pos + width).min(trimmed.len());
-                let v = &trimmed[pos..end].trim_end();
-                if v.is_empty()
-                    || params
-                        .empty_field_values
-                        .as_ref()
-                        .is_some_and(|ev| ev.contains(&v.to_string()))
-                {
-                    None
-                } else {
-                    Some(v.to_string())
-                }
-            } else {
-                None
-            };
-            row_map.insert(header.name.clone(), value);
-            pos += width;
-        }
-        batch.add_row(row_map);
-        row_index += 1;
-        line.clear();
+fn read_all<R: Read + Seek>(reader: &mut R, params: &ReaderParams) -> Result<RecordBatch, Error> {
+    let mut chunked = ChunkedReader::new(reader, params.clone(), usize::MAX)?;
+    match chunked.next_chunk()? {
+        Some(chunk) => Ok(chunk.batch),
+        None => Ok(RecordBatch::new()),
     }
-
-    Ok(batch)
 }
 
 pub fn read_file(path: &Path, params: &ReaderParams) -> Result<RecordBatch, Error> {
@@ -186,7 +103,7 @@ pub fn read_file(path: &Path, params: &ReaderParams) -> Result<RecordBatch, Erro
     }
 }
 
-fn resolve_skip_rows(skiprows: &Option<SkipRows>) -> Result<Vec<usize>, Error> {
+pub(crate) fn resolve_skip_rows(skiprows: &Option<SkipRows>) -> Result<Vec<usize>, Error> {
     match skiprows {
         Some(SkipRows::Single(n)) => Ok(vec![*n]),
         Some(SkipRows::Multiple(v)) => Ok(v.clone()),
@@ -194,7 +111,7 @@ fn resolve_skip_rows(skiprows: &Option<SkipRows>) -> Result<Vec<usize>, Error> {
     }
 }
 
-fn resolve_headers<R: Read + Seek>(
+pub(crate) fn resolve_headers<R: Read + Seek>(
     reader: &mut R,
     params: &ReaderParams,
 ) -> Result<Vec<String>, Error> {
@@ -215,7 +132,9 @@ fn resolve_headers<R: Read + Seek>(
     }
 }
 
-fn resolve_fixed_width_headers(headers: &Option<Headers>) -> Result<Vec<HeaderDict>, Error> {
+pub(crate) fn resolve_fixed_width_headers(
+    headers: &Option<Headers>,
+) -> Result<Vec<HeaderDict>, Error> {
     match headers {
         Some(Headers::Dict(dict)) => Ok(dict.clone()),
         Some(Headers::WidthMap(map)) => Ok(map
