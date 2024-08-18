@@ -24,6 +24,8 @@ pub enum Error {
     Csv(#[from] csv::Error),
     #[error("config error: {0}")]
     Config(String),
+    #[error("conversion error: {0}")]
+    Conversion(String),
     #[error("file definition not found for: {0}")]
     FileDefinitionNotFound(String),
 }
