@@ -3,6 +3,7 @@ mod contract;
 mod converter;
 mod default_tasks;
 mod error;
+pub mod fhirrs;
 pub mod fhirutils;
 mod integration_tests;
 mod lookup;
