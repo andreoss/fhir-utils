@@ -1,6 +1,8 @@
 use crate::contract::{Contract, FileDefinition};
 use crate::default_tasks::build_default_task_chain_with_start;
 use crate::error::Error;
+use crate::fhirrs::{dispatch, meta};
+use crate::fhirutils::builders;
 use crate::reader::ReaderParams;
 use crate::streaming::ChunkedReader;
 use crate::tasks::{execute_task_chain, TaskRegistry};
@@ -11,7 +13,9 @@ use std::io::{Read, Seek};
 use std::path::Path;
 use tracing::warn;
 
-pub type RecordConverter = fn(&str, &Value) -> Result<Vec<Value>, Error>;
+pub const NO_GROUP_BY_KEY: &str = "NoGroupByKey";
+
+pub type RecordConverter = fn(&str, &Value, &Value) -> Result<Vec<Value>, Error>;
 
 #[derive(Clone, Copy)]
 pub struct ConversionOptions<'a> {
@@ -91,7 +95,8 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
             let group_by_key = record
                 .get("groupByKey")
                 .and_then(|value| value.as_str())
-                .unwrap_or_default()
+                .filter(|value| !value.is_empty())
+                .unwrap_or(NO_GROUP_BY_KEY)
                 .to_string();
             self.pending.push_back(TransformedRow {
                 exception: None,
@@ -137,6 +142,7 @@ impl<R: Read + Seek> Iterator for Transform<'_, R> {
 pub struct Convert<'a, R: Read + Seek> {
     transform: Transform<'a, R>,
     converter: RecordConverter,
+    meta: Value,
 }
 
 impl<R: Read + Seek> Iterator for Convert<'_, R> {
@@ -144,7 +150,6 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let row = self.transform.next()?;
-        let resource_type = self.transform.options.file_def.resource_type.clone();
 
         if let Some(error) = row.exception {
             return Some(ConvertedRow {
@@ -154,18 +159,26 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
             });
         }
 
-        Some(match (self.converter)(&resource_type, &row.record) {
-            Ok(resources) => ConvertedRow {
-                exception: None,
-                group_by_key: row.group_by_key,
-                resources,
+        let row_num = builders::field(&row.record, "rowNum")
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_default();
+        let row_meta =
+            meta::meta_for_row(&self.meta, row_num, dispatch::source_record_id(&row.record));
+
+        Some(
+            match (self.converter)(&row.group_by_key, &row.record, &row_meta) {
+                Ok(resources) => ConvertedRow {
+                    exception: None,
+                    group_by_key: row.group_by_key,
+                    resources,
+                },
+                Err(error) => ConvertedRow {
+                    exception: Some(error),
+                    group_by_key: row.group_by_key,
+                    resources: Vec::new(),
+                },
             },
-            Err(error) => ConvertedRow {
-                exception: Some(error),
-                group_by_key: row.group_by_key,
-                resources: Vec::new(),
-            },
-        })
+        )
     }
 }
 
@@ -180,7 +193,7 @@ pub fn convert<'a>(
     path: &Path,
     options: ConversionOptions<'a>,
 ) -> Result<Convert<'a, File>, Error> {
-    convert_with(File::open(path)?, options, passthrough)
+    convert_with(File::open(path)?, options, dispatch::convert_record)
 }
 
 pub fn convert_with<'a, R: Read + Seek>(
@@ -188,14 +201,20 @@ pub fn convert_with<'a, R: Read + Seek>(
     options: ConversionOptions<'a>,
     converter: RecordConverter,
 ) -> Result<Convert<'a, R>, Error> {
+    let file_name = Path::new(options.file_path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| options.file_path.to_string());
+    let meta = meta::create_meta(
+        &file_name,
+        &options.file_def.resource_type,
+        &options.contract.general,
+    );
     Ok(Convert {
         transform: Transform::from_reader(reader, options)?,
         converter,
+        meta,
     })
-}
-
-fn passthrough(_resource_type: &str, record: &Value) -> Result<Vec<Value>, Error> {
-    Ok(vec![record.clone()])
 }
 
 #[cfg(test)]
@@ -329,9 +348,49 @@ mod tests {
         assert!(rows.iter().all(|row| row.exception.is_none()));
     }
 
+    fn echo(group_by_key: &str, record: &Value, meta: &Value) -> Result<Vec<Value>, Error> {
+        Ok(vec![json!({
+            "groupByKey": group_by_key,
+            "record": record.clone(),
+            "meta": meta.clone(),
+        })])
+    }
+
     #[test]
-    fn convert_yields_group_key_and_resources() {
+    fn convert_yields_group_key_resources_and_row_meta() {
         let def = file_def();
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+        let rows: Vec<_> = convert_with(
+            Cursor::new("a,b\n1,2\n"),
+            options(&contract, &def, &registry, 10),
+            echo,
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].exception.is_none());
+        assert_eq!(rows[0].group_by_key, "1");
+        assert_eq!(rows[0].resources.len(), 1);
+        assert_eq!(rows[0].resources[0]["record"]["a"], json!("1"));
+
+        let source_file_id = rows[0].resources[0]["meta"]["extension"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| {
+                entry["url"] == json!(crate::fhirutils::constants::EXT_META_SOURCE_FILE_ID)
+            })
+            .unwrap()["valueString"]
+            .clone();
+        assert_eq!(source_file_id, json!("in.csv:00001"));
+    }
+
+    #[test]
+    fn convert_dispatches_on_the_config_resource_type() {
+        let mut def = file_def();
+        def.resource_type = "Patient".into();
         let contract = contract(&def);
         let registry = TaskRegistry::new();
         let mut file = NamedTempFile::new().unwrap();
@@ -344,15 +403,32 @@ mod tests {
             .collect();
 
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].exception.is_none());
         assert_eq!(rows[0].group_by_key, "1");
-        assert_eq!(rows[0].resources.len(), 1);
-        assert_eq!(rows[0].resources[0]["a"], json!("1"));
+    }
+
+    #[test]
+    fn missing_group_by_key_falls_back_to_a_default_bucket() {
+        let mut def = file_def();
+        def.group_by_key = None;
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n"),
+            options(&contract, &def, &registry, 10),
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows[0].group_by_key, "NoGroupByKey");
     }
 
     #[test]
     fn convert_yields_row_errors_and_keeps_going() {
-        fn failing(_resource_type: &str, record: &Value) -> Result<Vec<Value>, Error> {
+        fn failing(
+            _group_by_key: &str,
+            record: &Value,
+            _meta: &Value,
+        ) -> Result<Vec<Value>, Error> {
             if record["a"] == json!("3") {
                 Err(Error::Conversion("row rejected".into()))
             } else {
