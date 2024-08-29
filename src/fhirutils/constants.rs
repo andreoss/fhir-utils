@@ -90,6 +90,188 @@ pub const CODE_SYSTEMS: &[(&str, &str)] = &[
     ("UMLS", UMLS_SYSTEM),
 ];
 
+pub const RACE_DISPLAY: &[(&str, &str)] = &[
+    ("1002-5", "American Indian or Alaska Native"),
+    ("1004-1", "American Indian"),
+    ("2028-9", "Asian"),
+    ("2029-7", "Asian Indian"),
+    ("2030-5", "Bangladeshi"),
+    ("2031-3", "Bhutanese"),
+    ("2032-1", "Burmese"),
+    ("2033-9", "Cambodian"),
+    ("2034-7", "Chinese"),
+    ("2035-4", "Taiwanese"),
+    ("2036-2", "Filipino"),
+    ("2037-0", "Hmong"),
+    ("2038-8", "Indonesian"),
+    ("2039-6", "Japanese"),
+    ("2040-4", "Korean"),
+    ("2041-2", "Laotian"),
+    ("2042-0", "Malaysian"),
+    ("2043-8", "Okinawan"),
+    ("2044-6", "Pakistani"),
+    ("2045-3", "Sri Lankan"),
+    ("2046-1", "Thai"),
+    ("2047-9", "Vietnamese"),
+    ("2048-7", "Iwo Jiman"),
+    ("2049-5", "Maldivian"),
+    ("2050-3", "Nepalese"),
+    ("2051-1", "Singaporean"),
+    ("2052-9", "Madagascar"),
+    ("2054-5", "Black or African American"),
+    ("2056-0", "Black"),
+    ("2058-6", "African American"),
+    ("2060-2", "African"),
+    ("2067-7", "Bahamian"),
+    ("2068-5", "Barbadian"),
+    ("2069-3", "Dominican"),
+    ("2070-1", "Dominica Islander"),
+    ("2071-9", "Haitian"),
+    ("2072-7", "Jamaican"),
+    ("2073-5", "Tobagoan"),
+    ("2074-3", "Trinidadian"),
+    ("2075-0", "West Indian"),
+    ("2076-8", "Native Hawaiian or Other Pacific Islander"),
+    ("2078-4", "Polynesian"),
+    ("2500-7", "Other Pacific Islander"),
+    ("2106-3", "White"),
+    ("2108-9", "European"),
+    ("2129-5", "Arab"),
+    ("2131-1", "Other Race"),
+];
+
+pub const ETHNICITY_DISPLAY: &[(&str, &str)] = &[
+    ("2135-2", "Hispanic or Latino"),
+    ("2186-5", "Not Hispanic or Latino"),
+];
+
+pub const ALLERGY_CLINICAL_STATUS_DISPLAY: &[(&str, &str)] = &[
+    ("active", "Active"),
+    ("inactive", "Inactive"),
+    ("resolved", "Resolved"),
+];
+
+pub const ALLERGY_VERIFICATION_STATUS_DISPLAY: &[(&str, &str)] = &[
+    ("unconfirmed", "Unconfirmed"),
+    ("confirmed", "Confirmed"),
+    ("refuted", "Refuted"),
+    ("entered-in-error", "Entered in Error"),
+];
+
+pub const CONDITION_CATEGORY_DISPLAY: &[(&str, &str)] = &[
+    ("problem-list-item", "Problem List Item"),
+    ("encounter-diagnosis", "Encounter Diagnosis"),
+];
+
+pub const CONDITION_CLINICAL_STATUS_DISPLAY: &[(&str, &str)] = &[
+    ("active", "Active"),
+    ("recurrence", "Recurrence"),
+    ("relapse", "Relapse"),
+    ("inactive", "Inactive"),
+    ("remission", "Remission"),
+    ("resolved", "Resolved"),
+];
+
+pub const CONDITION_VERIFICATION_STATUS_DISPLAY: &[(&str, &str)] = &[
+    ("unconfirmed", "Unconfirmed"),
+    ("provisional", "Provisional"),
+    ("differential", "Differential"),
+    ("confirmed", "Confirmed"),
+    ("refuted", "Refuted"),
+    ("entered-in-error", "Entered in Error"),
+];
+
+pub const ENCOUNTER_CLASS_DISPLAY: &[(&str, &str)] = &[
+    ("IMP", "inpatient encounter"),
+    ("EMER", "emergency"),
+    ("AMB", "ambulatory"),
+    ("RF", "Refill"),
+    ("VR", "virtual"),
+    ("HH", "home health"),
+];
+
+pub const PARTICIPANT_TYPE_DISPLAY: &[(&str, &str)] = &[
+    ("ADM", "admitter"),
+    ("ATND", "attender"),
+    ("CALLBCK", "callback contact"),
+    ("CON", "consultant"),
+    ("DIS", "discharger"),
+    ("ESC", "escort"),
+    ("REF", "referrer"),
+    ("SPRF", "secondary performer"),
+    ("PPRF", "primary performer"),
+    ("PART", "Participation"),
+];
+
+pub const ADMIT_SOURCE_DISPLAY: &[(&str, &str)] = &[
+    ("hosp-trans", "Transferred from other hospital"),
+    ("emd", "From accident/emergency department"),
+    ("outp", "From outpatient department"),
+    ("born", "Born in hospital"),
+    ("gp", "General Practitioner referral"),
+    ("mp", "Medical Practitioner/physician referral"),
+    ("nursing", "From nursing home"),
+    ("psych", "From psychiatric hospital"),
+    ("rehab", "From rehabilitation facility"),
+    ("other", "Other"),
+];
+
+pub const DIAGNOSIS_USE_DISPLAY: &[(&str, &str)] = &[
+    ("AD", "Admission diagnosis"),
+    ("DD", "Discharge diagnosis"),
+    ("CC", "Chief complaint"),
+    ("CM", "Comorbidity diagnosis"),
+    ("pre-op", "pre-op diagnosis"),
+    ("post-op", "post-op diagnosis"),
+    ("billing", "Billing"),
+];
+
+pub const IMMUNIZATION_STATUS_REASON_DISPLAY: &[(&str, &str)] = &[
+    ("IMMUNE", "immunity"),
+    ("MEDPREC", "medical precaution"),
+    ("OSTOCK", "product out of stock"),
+    ("PATOBJ", "patient objection"),
+    ("PHILISOP", "philosophica objection"),
+    ("RELIG", "religious objection"),
+    ("VACEFF", "vaccine efficacy concerns"),
+    ("VACSAF", "vaccine safety concerns"),
+];
+
+pub const LOCATION_TYPE_DISPLAY: &[(&str, &str)] = &[
+    ("ER", "Emergency room"),
+    ("HOSP", "Hospital"),
+    ("ICU", "Intensive care unit"),
+];
+
+pub const OBSERVATION_INTERPRETATION_DISPLAY: &[(&str, &str)] = &[
+    ("A", "Abnormal"),
+    ("AA", "Critical abnormal"),
+    ("H", "High"),
+    ("L", "Low"),
+    ("N", "Normal"),
+    ("NEG", "Negative"),
+    ("POS", "Positive"),
+];
+
+pub const OBSERVATION_CATEGORY_DISPLAY: &[(&str, &str)] = &[
+    ("social-history", "Social History"),
+    ("vital-signs", "Vital Signs"),
+    ("imaging", "Imaging"),
+    ("laboratory", "Laboratory"),
+    ("procedure", "Procedure"),
+    ("survey", "Survey"),
+    ("exam", "Exam"),
+    ("therapy", "Therapy"),
+    ("activity", "Activity"),
+];
+
+pub fn display(table: &[(&str, &'static str)], code: &str) -> Option<&'static str> {
+    table
+        .iter()
+        .find(|(key, _)| *key == code)
+        .map(|(_, display)| *display)
+}
+
 pub fn system_url(short_name: &str) -> Option<&'static str> {
     CODE_SYSTEMS
         .iter()

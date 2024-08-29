@@ -5,7 +5,7 @@ use serde_json::Value;
 pub type ConvertFn = fn(&str, &Value, &Value) -> Result<Vec<Value>, Error>;
 
 pub const RESOURCE_KEYS: &[(&str, ConvertFn)] = &[
-    ("Patient", not_implemented),
+    ("Patient", crate::fhirrs::patient::convert_record),
     ("AllergyIntolerance", not_implemented),
     ("Condition", not_implemented),
     ("Encounter", not_implemented),
