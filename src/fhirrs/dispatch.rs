@@ -6,7 +6,10 @@ pub type ConvertFn = fn(&str, &Value, &Value) -> Result<Vec<Value>, Error>;
 
 pub const RESOURCE_KEYS: &[(&str, ConvertFn)] = &[
     ("Patient", crate::fhirrs::patient::convert_record),
-    ("AllergyIntolerance", not_implemented),
+    (
+        "AllergyIntolerance",
+        crate::fhirrs::allergy_intolerance::convert_record,
+    ),
     ("Condition", not_implemented),
     ("Encounter", not_implemented),
     ("Immunization", not_implemented),
