@@ -11,7 +11,7 @@ pub const RESOURCE_KEYS: &[(&str, ConvertFn)] = &[
         crate::fhirrs::allergy_intolerance::convert_record,
     ),
     ("Condition", not_implemented),
-    ("Encounter", not_implemented),
+    ("Encounter", crate::fhirrs::encounter::convert_record),
     ("Immunization", not_implemented),
     ("Observation", not_implemented),
     ("Location", crate::fhirrs::location::convert_record),

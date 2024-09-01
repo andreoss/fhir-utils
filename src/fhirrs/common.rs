@@ -53,6 +53,21 @@ pub fn human_name(record: &Value) -> Option<Value> {
     builders::human_name_from_text(full, prefix, suffix)
 }
 
+pub fn reference_to(resource: &Value) -> Option<Value> {
+    let resource_type = builders::field(resource, "resourceType")?;
+    let id = builders::field(resource, "id")?;
+    let display = match resource_type {
+        "Practitioner" => resource
+            .get("name")
+            .and_then(|name| name.get(0))
+            .and_then(|name| name.get("text"))
+            .and_then(|text| text.as_str()),
+        "Organization" | "Location" => builders::field(resource, "name"),
+        _ => None,
+    };
+    builders::reference(resource_type, id, display)
+}
+
 pub fn project(record: &Value, fields: &[(&str, &str)]) -> Value {
     let mut projected = Map::new();
     for (source, target) in fields {
