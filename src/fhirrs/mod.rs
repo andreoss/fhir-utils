@@ -1,5 +1,6 @@
 pub mod allergy_intolerance;
 pub mod common;
+pub mod condition;
 pub mod dispatch;
 pub mod encounter;
 pub mod location;
