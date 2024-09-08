@@ -30,6 +30,7 @@ impl TaskRegistry {
             Arc::new(remove_whitespace_from_columns),
         );
         self.register("copy_columns", Arc::new(copy_columns));
+        crate::task_library::register(self);
     }
 
     pub fn register(&mut self, name: &str, func: TaskFn) {
@@ -131,6 +132,18 @@ fn remove_whitespace_from_columns(
             if let Some(v) = value {
                 *value = Some(v.trim().to_string());
             }
+        }
+    }
+
+    let renames: Vec<(String, String)> = batch
+        .columns
+        .keys()
+        .filter(|name| name.trim() != name.as_str())
+        .map(|name| (name.clone(), name.trim().to_string()))
+        .collect();
+    for (from, to) in renames {
+        if let Some(values) = batch.columns.remove(&from) {
+            batch.columns.insert(to, values);
         }
     }
     Ok(())
@@ -269,6 +282,21 @@ mod tests {
                 Some("normal".into())
             ]
         );
+    }
+
+    #[test]
+    fn test_remove_whitespace_from_column_names() {
+        let mut batch = make_batch_with_columns(HashMap::from([(
+            "  col1 ".into(),
+            vec![Some("value".into())],
+        )]));
+
+        remove_whitespace_from_columns(&mut batch, &HashMap::new()).unwrap();
+        assert_eq!(
+            batch.get_column("col1").unwrap(),
+            &vec![Some("value".into())]
+        );
+        assert!(batch.get_column("  col1 ").is_none());
     }
 
     #[test]

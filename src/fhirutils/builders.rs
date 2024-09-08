@@ -505,7 +505,7 @@ pub fn field_list(record: &Value, key: &str) -> Vec<String> {
             .map(|item| item.to_string())
             .collect(),
         Some(Value::String(text)) if !text.is_empty() => text
-            .split(['|', ','])
+            .split('|')
             .map(|item| item.trim())
             .filter(|item| !item.is_empty())
             .map(|item| item.to_string())
@@ -776,7 +776,7 @@ mod tests {
         assert_eq!(field(&record, "c"), None);
         assert_eq!(field(&record, "missing"), None);
         assert_eq!(field_list(&record, "d"), vec!["x", "y"]);
-        assert_eq!(field_list(&record, "e"), vec!["x", "y", "z"]);
+        assert_eq!(field_list(&record, "e"), vec!["x", "y, z"]);
         assert!(field_list(&record, "missing").is_empty());
     }
 
