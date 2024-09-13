@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  COVERAGE_FLOOR: "85"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Lint with optimized-streaming
+        run: cargo clippy --all-targets --features optimized-streaming -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Install coverage tool
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Coverage floor
+        run: cargo llvm-cov --lib --tests --fail-under-lines "$COVERAGE_FLOOR"
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke validate
+        run: ./target/release/fhir-utils validate -f tests/fixtures/contracts/valid.json
+
+      - name: Smoke convert file mode
+        run: |
+          ./target/release/fhir-utils convert \
+            -f tests/fixtures/live/input/patient.csv \
+            -c tests/fixtures/live/config \
+            -o "$RUNNER_TEMP/out-file"
+          test -d "$RUNNER_TEMP/out-file"
+
+      - name: Smoke convert directory mode
+        run: |
+          ./target/release/fhir-utils convert \
+            -d tests/fixtures/live \
+            -o "$RUNNER_TEMP/out-dir"
+          test -d "$RUNNER_TEMP/out-dir"
