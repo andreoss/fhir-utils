@@ -128,6 +128,32 @@ const VALID_RESOURCE_TYPES: &[&str] = &[
     "Basic",
 ];
 
+fn resolve_external_definitions(contract: &mut serde_json::Value) -> Result<(), Error> {
+    let definitions = match contract
+        .get_mut("fileDefinitions")
+        .and_then(|value| value.as_object_mut())
+    {
+        Some(definitions) => definitions,
+        None => return Ok(()),
+    };
+
+    let external: Vec<(String, String)> = definitions
+        .iter()
+        .filter_map(|(matcher, value)| {
+            value
+                .as_str()
+                .map(|source| (matcher.clone(), source.to_string()))
+        })
+        .collect();
+
+    for (matcher, source) in external {
+        let content = crate::opener::read_to_string(&source)?;
+        let definition: serde_json::Value = serde_json::from_str(&content)?;
+        definitions.insert(matcher, definition);
+    }
+    Ok(())
+}
+
 const KNOWN_TASKS: &[&str] = &[
     "add_constant",
     "add_row_num",
@@ -156,7 +182,9 @@ const KNOWN_TASKS: &[&str] = &[
 
 impl Contract {
     pub fn load(json: &str) -> Result<Self, Error> {
-        let contract: Contract = serde_json::from_str(json)?;
+        let mut raw: serde_json::Value = serde_json::from_str(json)?;
+        resolve_external_definitions(&mut raw)?;
+        let contract: Contract = serde_json::from_value(raw)?;
         contract.validate()?;
         Ok(contract)
     }
@@ -326,5 +354,53 @@ impl Contract {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod external_definition_tests {
+    use crate::contract::Contract;
+    use crate::opener::{opener, set_opener, MemoryOpener};
+    use serial_test::serial;
+    use std::sync::Arc;
+
+    const CONTRACT: &str = r#"{
+        "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+        "fileDefinitions": {"patient": "patient-definition.json"}
+    }"#;
+
+    const DEFINITION: &str = r#"{
+        "fileType": "csv",
+        "resourceType": "Patient",
+        "groupByKey": "patientInternalId"
+    }"#;
+
+    #[test]
+    #[serial]
+    fn external_file_definitions_are_loaded_through_the_opener() {
+        let previous = opener();
+        set_opener(Arc::new(MemoryOpener::new(vec![(
+            "patient-definition.json".into(),
+            DEFINITION.as_bytes().to_vec(),
+        )])));
+
+        let contract = Contract::load(CONTRACT).unwrap();
+        let definition = contract.file_definitions.get("patient").unwrap();
+        assert_eq!(definition.resource_type, "Patient");
+        assert_eq!(
+            definition.group_by_key.as_deref(),
+            Some("patientInternalId")
+        );
+
+        set_opener(previous);
+    }
+
+    #[test]
+    #[serial]
+    fn a_missing_external_definition_is_reported() {
+        let previous = opener();
+        set_opener(Arc::new(MemoryOpener::new(Vec::new())));
+        assert!(Contract::load(CONTRACT).is_err());
+        set_opener(previous);
     }
 }
