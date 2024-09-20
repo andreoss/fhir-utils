@@ -6,23 +6,32 @@ pub fn lookup_file_definition<'a>(
     contract: &'a Contract,
     filename: &str,
 ) -> Result<&'a crate::contract::FileDefinition, Error> {
-    if contract.general.regex_filenames {
-        for (pattern, def) in &contract.file_definitions {
-            let regex = Regex::new(pattern)
-                .map_err(|_| Error::Config(format!("invalid regex pattern: {pattern}")))?;
-            if regex.is_match(filename) {
-                return Ok(def);
-            }
-        }
-    } else {
-        for (matcher, def) in &contract.file_definitions {
-            if filename.contains(matcher) {
-                return Ok(def);
-            }
+    for matcher in ordered_matchers(contract) {
+        let definition = &contract.file_definitions[matcher];
+        let matched = if contract.general.regex_filenames {
+            Regex::new(matcher)
+                .map_err(|_| Error::Config(format!("invalid regex pattern: {matcher}")))?
+                .is_match(filename)
+        } else {
+            filename.contains(matcher)
+        };
+        if matched {
+            return Ok(definition);
         }
     }
 
     Err(Error::FileDefinitionNotFound(filename.into()))
+}
+
+fn ordered_matchers(contract: &Contract) -> Vec<&String> {
+    let mut matchers: Vec<&String> = contract.file_definitions.keys().collect();
+    matchers.sort_by(|left, right| {
+        right
+            .len()
+            .cmp(&left.len())
+            .then_with(|| left.as_str().cmp(right.as_str()))
+    });
+    matchers
 }
 
 #[cfg(test)]
@@ -136,5 +145,35 @@ mod tests {
 
         let err = lookup_file_definition(&contract, "patient.csv").unwrap_err();
         assert!(matches!(err, Error::FileDefinitionNotFound(_)));
+    }
+
+    #[test]
+    fn the_longest_matcher_wins_and_stays_stable() {
+        let mut contract = make_contract(false);
+        contract.file_definitions.insert(
+            "patient_encounter".into(),
+            FileDefinition {
+                file_type: FileType::Csv,
+                value_delimiter: ',',
+                convert_columns_to_string: true,
+                resource_type: "Condition".into(),
+                group_by_key: Some("patientInternalId".into()),
+                skiprows: None,
+                headers: None,
+                tasks: None,
+                comment: None,
+            },
+        );
+
+        for _ in 0..25 {
+            let definition = lookup_file_definition(&contract, "patient_encounter_2021").unwrap();
+            assert_eq!(definition.resource_type, "Condition");
+        }
+        assert_eq!(
+            lookup_file_definition(&contract, "patient_2021")
+                .unwrap()
+                .resource_type,
+            "Patient"
+        );
     }
 }

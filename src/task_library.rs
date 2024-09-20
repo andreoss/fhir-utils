@@ -136,27 +136,35 @@ fn read_source(source: &str, params: &ReaderParams) -> Result<RecordBatch, Error
     }
 }
 
+const SOURCE_COLUMN: &str = "source_value";
+const TARGET_COLUMN: &str = "target_value";
+
 fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
-    let params = ReaderParams {
-        file_type: FileType::Csv,
-        value_delimiter: ',',
-        convert_columns_to_string: true,
-        skiprows: None,
-        headers: None,
-        empty_field_values: None,
-    };
-    let batch = read_source(source, &params)?;
-    let mut names = batch.column_names();
-    names.sort();
-    let key_column = names.first().cloned().unwrap_or_default();
-    let value_column = names.get(1).cloned().unwrap_or_default();
+    let handle = opener::open(source)?;
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_reader(handle);
+
+    let headers = reader.headers()?.clone();
+    let position = |name: &str| headers.iter().position(|header| header.trim() == name);
+    let key_index = position(SOURCE_COLUMN).unwrap_or(0);
+    let value_index = position(TARGET_COLUMN).unwrap_or(1);
 
     let mut mapping = Map::new();
-    for row in 0..batch.row_count {
-        if let Some(key) = cell(&batch, &key_column, row) {
-            let value = cell(&batch, &value_column, row).unwrap_or_default();
-            mapping.insert(key.to_string(), Value::String(value.to_string()));
-        }
+    for record in reader.records() {
+        let record = record?;
+        let key = match record.get(key_index).map(str::trim) {
+            Some(key) if !key.is_empty() => key,
+            _ => continue,
+        };
+        let value = record.get(value_index).map(str::trim).unwrap_or_default();
+        let value = if value.is_empty() || value == "null" {
+            Value::Null
+        } else {
+            Value::String(value.to_string())
+        };
+        mapping.insert(key.to_string(), value);
     }
     Ok(mapping)
 }
@@ -176,10 +184,11 @@ fn mapped_value(
 ) -> Option<String> {
     let mapped = source
         .and_then(|source| mapping.get(source))
-        .or_else(|| mapping.get("default"))
-        .and_then(|value| value.as_str().map(|value| value.to_string()));
+        .or_else(|| mapping.get("default"));
     match mapped {
-        Some(mapped) => Some(mapped),
+        Some(Value::Null) => None,
+        Some(Value::String(value)) => Some(value.clone()),
+        Some(value) => Some(value.to_string()),
         None => fallback.map(|value| value.to_string()),
     }
 }
@@ -1323,6 +1332,51 @@ mod tests {
         );
 
         crate::opener::set_opener(previous);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn mapping_files_use_named_or_positional_columns() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            (
+                "named.csv".into(),
+                b"target_value,source_value\nmale,M\n,F\n".to_vec(),
+            ),
+            (
+                "positional.csv".into(),
+                b"zebra,alpha\nM,male\nF,null\n".to_vec(),
+            ),
+        ])));
+
+        let mut named = batch(&[("sex", &[Some("M"), Some("F")])]);
+        run(
+            &mut named,
+            "map_codes",
+            json!({"code_map": {"sex": "named.csv"}}),
+        );
+        assert_eq!(column(&named, "sex"), vec![Some("male".into()), None]);
+
+        let mut positional = batch(&[("sex", &[Some("M"), Some("F")])]);
+        run(
+            &mut positional,
+            "map_codes",
+            json!({"code_map": {"sex": "positional.csv"}}),
+        );
+        assert_eq!(column(&positional, "sex"), vec![Some("male".into()), None]);
+
+        crate::opener::set_opener(previous);
+    }
+
+    #[test]
+    fn an_explicit_null_mapping_clears_the_value() {
+        let mut data = batch(&[("sex", &[Some("M"), Some("F")])]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male", "F": null}}}),
+        );
+        assert_eq!(column(&data, "sex"), vec![Some("male".into()), None]);
     }
 
     #[test]
