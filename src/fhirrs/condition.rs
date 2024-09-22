@@ -53,14 +53,11 @@ pub fn convert_record(
     let mut encounter_index = None;
     if has_encounter_data(&record) {
         let encounter = encounter::build(group_by_key, &record, meta, &mut resources);
-        encounter_index = Some(resources.len());
-        resources.push(encounter);
-        if let Some(reference) = resources
-            .get(encounter_index.unwrap())
-            .and_then(common::reference_to)
-        {
+        if let Some(reference) = common::reference_to(&encounter) {
             condition.insert("encounter".into(), reference);
         }
+        encounter_index = Some(resources.len());
+        resources.push(encounter);
     }
 
     if let Some(status) = builders::field(&record, "conditionClinicalStatus") {
