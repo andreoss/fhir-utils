@@ -118,7 +118,9 @@ pub(crate) fn resolve_headers<R: Read + Seek>(
     match &params.headers {
         Some(Headers::List(list)) => Ok(list.clone()),
         Some(Headers::Dict(dict)) => Ok(dict.iter().map(|h| h.name.clone()).collect()),
-        Some(Headers::WidthMap(map)) => Ok(map.keys().cloned().collect()),
+        Some(Headers::WidthMap(map)) => {
+            Ok(map.entries().iter().map(|(name, _)| name.clone()).collect())
+        }
         None => {
             let mut csv_reader = ReaderBuilder::new()
                 .delimiter(params.value_delimiter as u8)
@@ -138,6 +140,7 @@ pub(crate) fn resolve_fixed_width_headers(
     match headers {
         Some(Headers::Dict(dict)) => Ok(dict.clone()),
         Some(Headers::WidthMap(map)) => Ok(map
+            .entries()
             .iter()
             .map(|(name, width)| HeaderDict {
                 name: name.clone(),
@@ -152,7 +155,6 @@ pub(crate) fn resolve_fixed_width_headers(
 mod tests {
     use super::*;
     use crate::contract::{FileDefinition, FileType, General, HeaderDict, Headers, SkipRows};
-    use std::collections::HashMap;
     use std::io::Cursor;
     use std::io::Write;
     use tempfile::NamedTempFile;
@@ -373,16 +375,55 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let general = make_general();
         let mut def = make_fixed_width_def();
-        let mut map = HashMap::new();
-        map.insert("field1".into(), 10);
-        map.insert("field2".into(), 20);
-        def.headers = Some(Headers::WidthMap(map));
+        def.headers = Some(Headers::WidthMap(crate::contract::WidthMap(vec![
+            ("field1".into(), 10),
+            ("field2".into(), 20),
+        ])));
         let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
 
         let batch = read_fixed_width(&mut cursor, &params).unwrap();
         assert_eq!(batch.row_count, 1);
-        assert!(batch.get_column("field1").is_some());
-        assert!(batch.get_column("field2").is_some());
+        assert_eq!(
+            batch.get_column("field1").unwrap(),
+            &vec![Some("1234567890".into())]
+        );
+        assert_eq!(
+            batch.get_column("field2").unwrap(),
+            &vec![Some("abcdefghij".into())]
+        );
+    }
+
+    #[test]
+    fn test_width_map_headers_keep_contract_order() {
+        let contract = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "obs": {
+                    "fileType": "fixed-width",
+                    "resourceType": "Observation",
+                    "groupByKey": "patientInternalId",
+                    "headers": {"patientInternalId": 4, "observationCode": 6, "observationValue": 3}
+                }
+            }
+        }"#;
+        let contract = crate::contract::Contract::load(contract).unwrap();
+        let def = contract.file_definitions.get("obs").unwrap();
+        let params = ReaderParams::from_file_definition(def, None);
+
+        let mut cursor = Cursor::new("p1  1234-5 42\n");
+        let batch = read_fixed_width(&mut cursor, &params).unwrap();
+        assert_eq!(
+            batch.get_column("patientInternalId").unwrap(),
+            &vec![Some("p1".into())]
+        );
+        assert_eq!(
+            batch.get_column("observationCode").unwrap(),
+            &vec![Some("1234-5".into())]
+        );
+        assert_eq!(
+            batch.get_column("observationValue").unwrap(),
+            &vec![Some("42".into())]
+        );
     }
 
     #[test]
