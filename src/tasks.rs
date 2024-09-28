@@ -44,6 +44,12 @@ impl TaskRegistry {
     pub fn contains(&self, name: &str) -> bool {
         self.tasks.contains_key(name)
     }
+
+    pub fn names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.tasks.keys().cloned().collect();
+        names.sort();
+        names
+    }
 }
 
 impl Default for TaskRegistry {
