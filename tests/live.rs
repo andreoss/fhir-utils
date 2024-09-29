@@ -12,13 +12,8 @@ fn fixtures() -> PathBuf {
 }
 
 fn convert_fixture_tree(output: &Path) -> fhir_utils::cli::ConvertSummary {
-    run_convert(&ConvertRequest {
-        base: Some(fixtures()),
-        file: None,
-        config_dir: None,
-        output: output.to_path_buf(),
-    })
-    .expect("conversion failed")
+    run_convert(&ConvertRequest::directory(fixtures(), output.to_path_buf()))
+        .expect("conversion failed")
 }
 
 fn is_generated_id(value: &str) -> bool {
@@ -178,12 +173,11 @@ fn live_extract_covers_every_input_shape() {
 #[test]
 fn regex_file_matching_selects_definitions() {
     let output = tempfile::TempDir::new().unwrap();
-    let summary = run_convert(&ConvertRequest {
-        base: None,
-        file: Some(fixtures().join("input/patient.csv")),
-        config_dir: Some(fixtures().join("config-regex")),
-        output: output.path().to_path_buf(),
-    })
+    let summary = run_convert(&ConvertRequest::single_file(
+        fixtures().join("input/patient.csv"),
+        fixtures().join("config-regex"),
+        output.path().to_path_buf(),
+    ))
     .unwrap();
     assert_eq!(summary.files, 1);
     assert_eq!(summary.resources, 2);
@@ -192,13 +186,10 @@ fn regex_file_matching_selects_definitions() {
 #[test]
 fn invalid_contracts_are_rejected() {
     let output = tempfile::TempDir::new().unwrap();
-    let result = run_convert(&ConvertRequest {
-        base: None,
-        file: Some(fixtures().join("input/patient.csv")),
-        config_dir: Some(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contracts"),
-        ),
-        output: output.path().to_path_buf(),
-    });
+    let result = run_convert(&ConvertRequest::single_file(
+        fixtures().join("input/patient.csv"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contracts"),
+        output.path().to_path_buf(),
+    ));
     assert!(result.is_err());
 }

@@ -81,6 +81,7 @@ fn run_conversion(
         file,
         config_dir,
         output,
+        opener: None,
     })?;
     println!(
         "Converted {} file(s), wrote {} resource(s), skipped {} file(s)",

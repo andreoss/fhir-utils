@@ -21,12 +21,10 @@ fn tree(input: &[u8]) -> TempDir {
 }
 
 fn convert(base: &Path, output: &Path) -> fhir_utils::cli::ConvertSummary {
-    run_convert(&ConvertRequest {
-        base: Some(base.to_path_buf()),
-        file: None,
-        config_dir: None,
-        output: output.to_path_buf(),
-    })
+    run_convert(&ConvertRequest::directory(
+        base.to_path_buf(),
+        output.to_path_buf(),
+    ))
     .unwrap()
 }
 
