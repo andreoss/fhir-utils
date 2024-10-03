@@ -1,0 +1,62 @@
+{
+  "id": "l2",
+  "identifier": [
+    {
+      "id": "RI.l2",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "RI",
+            "display": "Resource identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Resource identifier"
+      },
+      "value": "l2"
+    }
+  ],
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "location.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "Location"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "name": "Main ER",
+  "resourceType": "Location",
+  "type": [
+    {
+      "coding": [
+        {
+          "code": "ER",
+          "display": "Emergency room",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode"
+        }
+      ],
+      "text": "Emergency room"
+    }
+  ]
+}

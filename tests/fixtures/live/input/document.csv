@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,documentAttachmentContent,documentAttachmentTitle,documentDateTime,documentStatus
+p1,d1,Progress note text,Progress note,2021-06-01 10:00:00,final

@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,documentAttachmentContent,documentAttachmentContentType,documentDateTime,documentStatus,practitionerInternalId,practitionerNameLast
+p1,rp1,Report body,text/html,2021-06-02 11:00:00,final,pr9,House

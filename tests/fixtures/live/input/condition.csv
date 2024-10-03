@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,encounterInternalId,conditionCode,conditionCodeSystem,conditionCodeText,conditionCategory,conditionDiagnosisRank,conditionChronicity
+p1,c1,e9,E11.9,ICD10,Diabetes,encounter-diagnosis,1,chronic

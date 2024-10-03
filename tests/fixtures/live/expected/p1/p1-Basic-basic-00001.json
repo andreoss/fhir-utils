@@ -1,0 +1,76 @@
+{
+  "code": {
+    "coding": [
+      {
+        "code": "patient-tokens",
+        "display": "Patient Tokens",
+        "system": "urn:id:basic-resource-type"
+      }
+    ],
+    "text": "Patient Tokens"
+  },
+  "created": "2021-06-01",
+  "id": "patient-tokens.p1",
+  "identifier": [
+    {
+      "id": "tokens.token1",
+      "system": "urn:id:token-system",
+      "type": {
+        "coding": [
+          {
+            "code": "TKN",
+            "display": "Token identifier",
+            "system": "urn:id:identifier-type"
+          }
+        ],
+        "text": "Token identifier"
+      },
+      "value": "abc"
+    },
+    {
+      "id": "tokens.other1",
+      "system": "urn:id:othersystem",
+      "type": {
+        "coding": [
+          {
+            "code": "other1",
+            "system": "urn:id:othersystem"
+          }
+        ]
+      },
+      "value": "xyz"
+    }
+  ],
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "basic.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "Basic"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "resourceType": "Basic",
+  "subject": {
+    "reference": "Patient/p1"
+  }
+}

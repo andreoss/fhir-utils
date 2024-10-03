@@ -1,0 +1,89 @@
+{
+  "authoredOn": "2021-05-30T00:00:00-04:00",
+  "dispenseRequest": {
+    "numberOfRepeatsAllowed": 3,
+    "quantity": {
+      "value": 30
+    }
+  },
+  "id": "mr1",
+  "identifier": [
+    {
+      "id": "PI.p1",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "PI",
+            "display": "Patient internal identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Patient internal identifier"
+      },
+      "value": "p1"
+    },
+    {
+      "id": "RI.mr1",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "RI",
+            "display": "Resource identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Resource identifier"
+      },
+      "value": "mr1"
+    },
+    {
+      "id": "extID",
+      "system": "urn:id:extID",
+      "value": "1049502-RXNORM"
+    }
+  ],
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [
+      {
+        "code": "1049502",
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+      }
+    ]
+  },
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "medication_request.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "MedicationRequest"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "resourceType": "MedicationRequest",
+  "status": "unknown",
+  "subject": {
+    "reference": "Patient/p1"
+  }
+}

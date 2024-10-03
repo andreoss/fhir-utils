@@ -1,0 +1,82 @@
+{
+  "class": {
+    "code": "temp-unknown",
+    "display": "Temporarily Unknown",
+    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason"
+  },
+  "diagnosis": [
+    {
+      "condition": {
+        "display": "E11.9 (Diabetes)",
+        "reference": "Condition/c1"
+      },
+      "id": "1",
+      "rank": 1
+    }
+  ],
+  "id": "e9",
+  "identifier": [
+    {
+      "id": "PI.p1",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "PI",
+            "display": "Patient internal identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Patient internal identifier"
+      },
+      "value": "p1"
+    },
+    {
+      "id": "RI.e9",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "RI",
+            "display": "Resource identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Resource identifier"
+      },
+      "value": "e9"
+    }
+  ],
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "condition.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "Condition"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "resourceType": "Encounter",
+  "subject": {
+    "reference": "Patient/p1"
+  }
+}

@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,medicationCode,medicationCodeSystem,medicationUseStatus
+p1,ms1,1049502,RXNORM,active

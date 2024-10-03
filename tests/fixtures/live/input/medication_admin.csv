@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,medicationCode,medicationCodeSystem,medicationUseOccuranceDateTime,medicationUseDosageValue,medicationUseDosageUnit
+p1,ma1,1049502,RXNORM,2021-06-02 08:00:00,1,tablet

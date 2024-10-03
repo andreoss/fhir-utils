@@ -1,0 +1,2 @@
+patientInternalIdentifier,baseSystem,tokenList,otherIdentifierList,created_date
+p1,tokens,token1^abc^urn:id:token-system,other1^xyz^othersystem,2021-06-01

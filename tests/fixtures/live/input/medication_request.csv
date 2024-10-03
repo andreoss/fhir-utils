@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,medicationCode,medicationCodeSystem,medicationRequestIntent,medicationAuthoredOn,medicationRefills,medicationQuantity
+p1,mr1,1049502,RXNORM,order,2021-05-30,3,30

@@ -18,6 +18,48 @@ mod tests {
     }
 
     #[test]
+    fn test_load_valid_contract_general_options() {
+        let contract = Contract::load(&read_fixture("valid.json")).unwrap();
+        assert_eq!(
+            contract.general.assigning_authority.as_deref(),
+            Some("1.2.3.4.5")
+        );
+        assert_eq!(
+            contract.general.empty_field_values.as_deref(),
+            Some(["", "NA", "N/A", "null"].map(String::from).as_slice())
+        );
+        assert!(!contract.general.regex_filenames);
+    }
+
+    #[test]
+    fn test_file_definition_defaults_and_options() {
+        let contract = Contract::load(&read_fixture("valid.json")).unwrap();
+
+        let patient = contract.file_definitions.get("patient").unwrap();
+        assert_eq!(patient.value_delimiter, ',');
+        assert!(patient.convert_columns_to_string);
+        assert_eq!(patient.resource_type, "Patient");
+        assert_eq!(patient.group_by_key.as_deref(), Some("patientInternalId"));
+        assert_eq!(patient.skiprows, Some(crate::contract::SkipRows::Single(1)));
+        assert_eq!(patient.tasks.as_ref().unwrap().len(), 1);
+        assert_eq!(patient.comment.as_deref(), Some("Patient extract file"));
+        assert!(matches!(
+            patient.headers,
+            Some(crate::contract::Headers::List(_))
+        ));
+
+        let encounter = contract.file_definitions.get("encounter").unwrap();
+        assert_eq!(encounter.value_delimiter, ',');
+        assert!(encounter.convert_columns_to_string);
+        assert!(encounter.skiprows.is_none());
+        assert!(encounter.tasks.is_none());
+        assert!(matches!(
+            encounter.headers,
+            Some(crate::contract::Headers::Dict(_))
+        ));
+    }
+
+    #[test]
     fn test_reject_invalid_timezone() {
         let json = read_fixture("invalid_timezone.json");
         let err = Contract::load(&json).unwrap_err();

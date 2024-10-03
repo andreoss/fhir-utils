@@ -1,0 +1,55 @@
+{
+  "id": "pr9",
+  "identifier": [
+    {
+      "id": "RI.pr9",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "RI",
+            "display": "Resource identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Resource identifier"
+      },
+      "value": "pr9"
+    }
+  ],
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "report.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "DiagnosticReport"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "name": [
+    {
+      "family": "House",
+      "text": "House"
+    }
+  ],
+  "resourceType": "Practitioner"
+}

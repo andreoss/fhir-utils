@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,immunizationVaccineCode,immunizationVaccineSystem,immunizationStatus,immunizationDate,organizationResourceInternalId,organizationName
+p1,i1,208,CVX,completed,2021-06-01,o1,Vaccine Co

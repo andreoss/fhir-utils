@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,resourceType,documentAttachmentContent,documentDateTime,documentTypeCode
+p1,u1,DiagnosticReport,Unstructured body,2021-06-03 12:00:00,11488-4
