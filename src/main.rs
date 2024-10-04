@@ -14,25 +14,34 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Validate a data contract file
+    #[command(about = "Validate a data contract file")]
     Validate {
-        /// Path to the contract JSON file
-        #[arg(short, long)]
+        #[arg(short, long, help = "Path to the contract JSON file")]
         file: String,
     },
-    /// Convert delimited or fixed-width records to FHIR resources
+    #[command(about = "Convert delimited or fixed-width records to FHIR resources")]
     Convert {
-        /// Base directory holding input/ and config/
-        #[arg(short = 'd', long, conflicts_with = "file")]
+        #[arg(
+            short = 'd',
+            long,
+            conflicts_with = "file",
+            help = "Base directory holding input/ and config/"
+        )]
         directory: Option<PathBuf>,
-        /// Single input file; requires --config-dir
-        #[arg(short = 'f', long, requires = "config_dir")]
+        #[arg(
+            short = 'f',
+            long,
+            requires = "config_dir",
+            help = "Single input file; requires --config-dir"
+        )]
         file: Option<PathBuf>,
-        /// Configuration directory holding the data contract
-        #[arg(short = 'c', long)]
+        #[arg(
+            short = 'c',
+            long,
+            help = "Configuration directory holding the data contract"
+        )]
         config_dir: Option<PathBuf>,
-        /// Output directory for FHIR resources
-        #[arg(short, long)]
+        #[arg(short, long, help = "Output directory for FHIR resources")]
         output: PathBuf,
     },
 }
