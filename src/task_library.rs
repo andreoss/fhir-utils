@@ -919,7 +919,6 @@ fn read_secondary(
     let mut params = ReaderParams {
         file_type,
         value_delimiter: ',',
-        convert_columns_to_string: true,
         skiprows: None,
         headers: None,
         empty_field_values: None,

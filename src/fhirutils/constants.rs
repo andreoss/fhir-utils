@@ -1,4 +1,3 @@
-pub const HL7_EXTENSION_BASE: &str = "http://hl7.org/fhir/StructureDefinition/";
 pub const LOCAL_BASE: &str = "urn:id:";
 
 pub const EXT_RACE: &str = "urn:id:local-race-cd";
@@ -26,7 +25,6 @@ pub const ALLERGY_CLINICAL_STATUS_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical";
 pub const ALLERGY_VERIFICATION_STATUS_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification";
-pub const CLAIM_TYPE_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/claim-type";
 pub const CONDITION_CATEGORY_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/condition-category";
 pub const CONDITION_CLINICAL_STATUS_SYSTEM: &str =
@@ -51,7 +49,6 @@ pub const OBSERVATION_INTERPRETATION_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation";
 pub const PARTICIPANT_TYPE_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/v3-ParticipationType";
-pub const PRIORITY_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v3-ActPriority";
 pub const RACE_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v3-Race";
 pub const RE_ADMISSION_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v2-0092";
 pub const DATA_ABSENT_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/data-absent-reason";
@@ -70,8 +67,6 @@ pub const RXNORM_SYSTEM: &str = "http://www.nlm.nih.gov/research/umls/rxnorm";
 pub const SNOMED_SYSTEM: &str = "http://snomed.info/sct";
 pub const UMLS_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/umls";
 
-pub const NPI_SYSTEM: &str = "http://hl7.org.fhir/sid/us-npi";
-pub const SSN_SYSTEM: &str = "http://hl7.org/fhir/sid/us-ssn";
 pub const IDENTIFIER_TYPE_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v2-0203";
 pub const IDENTIFIER_TYPE_SYSTEM_RXN: &str = "urn:id:identifier-type";
 pub const EXT_ID_SYSTEM: &str = "urn:id:extID";

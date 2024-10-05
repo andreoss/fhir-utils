@@ -1,5 +1,4 @@
 use crate::error::Error;
-
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
