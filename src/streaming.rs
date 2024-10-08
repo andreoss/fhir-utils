@@ -5,9 +5,7 @@ use crate::reader::{
 };
 use csv::{Reader, ReaderBuilder};
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::Path;
 
 pub struct Chunk {
     pub batch: RecordBatch,
@@ -180,15 +178,6 @@ impl<R: Read + Seek> Iterator for ChunkedReader<R> {
     }
 }
 
-pub fn read_file_chunked(
-    path: &Path,
-    params: &ReaderParams,
-    buffer_size: usize,
-) -> Result<ChunkedReader<File>, Error> {
-    let file = File::open(path)?;
-    ChunkedReader::new(file, params.clone(), buffer_size)
-}
-
 fn normalize(value: Option<&str>, params: &ReaderParams) -> Option<String> {
     let value = value?;
     let empty = params
@@ -207,7 +196,7 @@ mod tests {
     use crate::contract::{FileDefinition, FileType, General, HeaderDict, Headers, SkipRows};
     use crate::default_tasks::build_default_task_chain_with_start;
     use crate::reader::ReaderParams;
-    use crate::streaming::{read_file_chunked, ChunkedReader};
+    use crate::streaming::ChunkedReader;
     use crate::tasks::{execute_task_chain, TaskRegistry};
     use std::io::{Cursor, Write};
     use tempfile::NamedTempFile;
@@ -417,7 +406,8 @@ mod tests {
 
         let def = csv_def();
         let p = params(&def, &general());
-        let mut reader = read_file_chunked(file.path(), &p, 1).unwrap();
+        let handle = std::fs::File::open(file.path()).unwrap();
+        let mut reader = ChunkedReader::new(handle, p, 1).unwrap();
         assert_eq!(reader.next_chunk().unwrap().unwrap().starting_row_num, 1);
         assert_eq!(reader.next_chunk().unwrap().unwrap().starting_row_num, 2);
         assert!(reader.next_chunk().unwrap().is_none());

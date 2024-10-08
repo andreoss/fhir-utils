@@ -3,9 +3,7 @@ use crate::error::Error;
 use crate::streaming::ChunkedReader;
 use csv::ReaderBuilder;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct ReaderParams {
@@ -91,14 +89,6 @@ fn read_all<R: Read + Seek>(reader: &mut R, params: &ReaderParams) -> Result<Rec
     match chunked.next_chunk()? {
         Some(chunk) => Ok(chunk.batch),
         None => Ok(RecordBatch::new()),
-    }
-}
-
-pub fn read_file(path: &Path, params: &ReaderParams) -> Result<RecordBatch, Error> {
-    let mut file = File::open(path)?;
-    match params.file_type {
-        FileType::Csv => read_delimited(&mut file, params),
-        FileType::FixedWidth => read_fixed_width(&mut file, params),
     }
 }
 
@@ -445,7 +435,8 @@ mod tests {
         let def = make_csv_def();
         let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
 
-        let batch = read_file(file.path(), &params).unwrap();
+        let mut handle = std::fs::File::open(file.path()).unwrap();
+        let batch = read_delimited(&mut handle, &params).unwrap();
         assert_eq!(batch.row_count, 2);
     }
 
@@ -459,8 +450,8 @@ mod tests {
         let general = make_general();
         let def = make_fixed_width_def();
         let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
-
-        let batch = read_file(file.path(), &params).unwrap();
+        let mut handle = std::fs::File::open(file.path()).unwrap();
+        let batch = read_fixed_width(&mut handle, &params).unwrap();
         assert_eq!(batch.row_count, 2);
     }
 
