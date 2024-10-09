@@ -23,10 +23,8 @@ impl Config {
     }
 }
 
-#[allow(dead_code)]
 static CONFIG: Lazy<Config> = Lazy::new(Config::from_env);
 
-#[allow(dead_code)]
 pub fn config() -> &'static Config {
     &CONFIG
 }
