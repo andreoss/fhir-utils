@@ -173,13 +173,10 @@ fn default_document_code(kind: &str) -> Option<Value> {
 
 #[cfg(test)]
 mod tests {
+    use crate::fhirrs::testing::meta;
     use crate::fhirrs::unstructured::*;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_attachment_content_produces_no_resource() {

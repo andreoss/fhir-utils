@@ -256,12 +256,9 @@ fn add_dosage(kind: &str, resource: &mut Map<String, Value>, record: &Value) {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::medication::*;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_medication_code_produces_no_resource() {

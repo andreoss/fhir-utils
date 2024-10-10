@@ -108,11 +108,8 @@ fn other_identifier(base_system: &str, entry: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::basic::convert_record;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use crate::fhirrs::testing::meta;
+    use serde_json::json;
 
     #[test]
     fn basic_carries_tokens_subject_and_created_date() {
