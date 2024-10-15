@@ -137,6 +137,44 @@ fn convert_strict_mode_reports_an_ungroupable_file() {
 }
 
 #[test]
+fn convert_names_skipped_files_and_warns_about_stale_output() {
+    let base = fixture_tree();
+    std::fs::write(base.path().join("input/billing.csv"), "a,b\n1,2\n").unwrap();
+    let output = base.path().join("out");
+
+    let first = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(first.status.success());
+    let summary = String::from_utf8_lossy(&first.stdout);
+    assert!(
+        summary.contains("skipped 1 file(s): billing.csv"),
+        "{summary}"
+    );
+    assert!(!String::from_utf8_lossy(&first.stderr).contains("not empty"));
+
+    let second = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(second.status.success());
+    let warnings = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        warnings.contains("output directory is not empty"),
+        "{warnings}"
+    );
+}
+
+#[test]
 fn convert_requires_an_input_selector() {
     let base = fixture_tree();
     let result = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))

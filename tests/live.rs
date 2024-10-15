@@ -80,7 +80,7 @@ fn live_extract_matches_the_golden_files() {
     let output = tempfile::TempDir::new().unwrap();
     let summary = convert_fixture_tree(output.path());
     assert_eq!(summary.files, 19);
-    assert_eq!(summary.skipped, 1);
+    assert_eq!(summary.skipped(), 1);
 
     let produced = collect(output.path());
     let expected_root = fixtures().join("expected");

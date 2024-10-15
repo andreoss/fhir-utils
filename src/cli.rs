@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone, Default)]
 pub struct ConvertRequest {
@@ -74,7 +74,13 @@ impl ConvertRequest {
 pub struct ConvertSummary {
     pub files: usize,
     pub resources: usize,
-    pub skipped: usize,
+    pub skipped_files: Vec<String>,
+}
+
+impl ConvertSummary {
+    pub fn skipped(&self) -> usize {
+        self.skipped_files.len()
+    }
 }
 
 #[derive(Default)]
@@ -111,6 +117,12 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let contract = Contract::load(&fs::read_to_string(&contract_path)?)?;
     let registry = TaskRegistry::new();
     fs::create_dir_all(&request.output)?;
+    if fs::read_dir(&request.output)?.next().is_some() {
+        warn!(
+            output = %request.output.display(),
+            "output directory is not empty; files from earlier runs are left in place"
+        );
+    }
 
     let mut counters = Counters::default();
     let mut summary = ConvertSummary::default();
@@ -121,7 +133,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
             Ok(file_def) => file_def,
             Err(_) => {
                 info!(file = %input.display(), "no file definition matched");
-                summary.skipped += 1;
+                summary.skipped_files.push(file_name(&input));
                 continue;
             }
         };
@@ -332,7 +344,7 @@ mod tests {
 
         let summary = run_convert(&request).unwrap();
         assert_eq!(summary.files, 1);
-        assert_eq!(summary.skipped, 1);
+        assert_eq!(summary.skipped(), 1);
         assert_eq!(summary.resources, 2);
 
         let first = output.path().join("p1/p1-Patient-patient-00001.json");
@@ -390,14 +402,10 @@ mod tests {
             output.path().to_path_buf(),
         );
         let summary = run_convert(&request).unwrap();
-        assert_eq!(
-            summary,
-            ConvertSummary {
-                files: 0,
-                resources: 0,
-                skipped: 1
-            }
-        );
+        assert_eq!(summary.files, 0);
+        assert_eq!(summary.resources, 0);
+        assert_eq!(summary.skipped(), 1);
+        assert_eq!(summary.skipped_files, vec!["unmatched.csv".to_string()]);
     }
 
     #[test]
