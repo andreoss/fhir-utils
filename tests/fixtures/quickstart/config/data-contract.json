@@ -1,0 +1,28 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "hospital-a",
+    "streamType": "live"
+  },
+  "fileDefinitions": {
+    "patients": {
+      "fileType": "csv",
+      "resourceType": "Patient",
+      "groupByKey": "MRN",
+      "tasks": [
+        {
+          "task": "rename_columns",
+          "column_map": {
+            "MRN": "mrn",
+            "LastName": "nameLast",
+            "FirstName": "nameFirst",
+            "Sex": "gender",
+            "DOB": "birthDate",
+            "SSN": "ssn"
+          }
+        },
+        { "task": "map_codes", "code_map": { "gender": "sex.csv" } }
+      ]
+    }
+  }
+}
