@@ -66,27 +66,31 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
     }
 
     fn check_group_key(&mut self, batch: &RecordBatch) -> Result<(), Error> {
-        if self.group_key_checked {
-            return Ok(());
-        }
-        self.group_key_checked = true;
-
-        let column = match missing_group_key(batch, self.options.file_def) {
+        let column = match self.options.file_def.group_by_key.as_deref() {
             Some(column) => column,
             None => return Ok(()),
         };
+        let ungrouped = ungrouped_rows(batch);
+        if ungrouped == 0 {
+            return Ok(());
+        }
+
         if self.options.strict {
             return Err(Error::Conversion(format!(
-                "group key column {column} produced no value in {}",
+                "{ungrouped} row(s) have no value for group key column {column} in {}",
                 self.options.file_path
             )));
         }
-        warn!(
-            file = self.options.file_path,
-            column,
-            bucket = NO_GROUP_BY_KEY,
-            "group key column not found in the source; rows share one bucket and one resource id"
-        );
+        if !self.group_key_checked {
+            self.group_key_checked = true;
+            warn!(
+                file = self.options.file_path,
+                column,
+                rows = ungrouped,
+                bucket = NO_GROUP_BY_KEY,
+                "rows without a group key value share one bucket and one resource id"
+            );
+        }
         Ok(())
     }
 
@@ -107,15 +111,15 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
         if let Some(user_tasks) = &self.options.file_def.tasks {
             tasks.extend(user_tasks.clone());
         }
-        let task_errors = execute_task_chain(&mut batch, &tasks, self.options.registry);
-        for error in &task_errors {
-            warn!(error = %error, "task failed");
+        let failures = execute_task_chain(&mut batch, &tasks, self.options.registry);
+        for failure in &failures {
+            warn!(task = failure.task, error = %failure.error, "task failed");
         }
         if self.options.strict {
-            if let Some(error) = task_errors.first() {
+            if let Some(failure) = failures.first() {
                 return Err(Error::Conversion(format!(
-                    "task failed in {}: {error}",
-                    self.options.file_path
+                    "task {} failed in {}: {}",
+                    failure.task, self.options.file_path, failure.error
                 )));
             }
         }
@@ -220,17 +224,13 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
     }
 }
 
-pub fn missing_group_key<'a>(batch: &RecordBatch, file_def: &'a FileDefinition) -> Option<&'a str> {
-    let column = file_def.group_by_key.as_deref()?;
-    let grouped = batch.columns.get("groupByKey").is_some_and(|values| {
-        values
+pub fn ungrouped_rows(batch: &RecordBatch) -> usize {
+    match batch.columns.get("groupByKey") {
+        Some(values) => values
             .iter()
-            .any(|value| builders::non_empty(value.as_deref()).is_some())
-    });
-    if grouped {
-        None
-    } else {
-        Some(column)
+            .filter(|value| builders::non_empty(value.as_deref()).is_none())
+            .count(),
+        None => batch.row_count,
     }
 }
 
@@ -544,22 +544,37 @@ mod tests {
         assert_eq!(rows[0].group_by_key, "NoGroupByKey");
 
         let mut batch = crate::reader::RecordBatch::new();
-        batch.row_count = 1;
-        assert_eq!(
-            crate::converter::missing_group_key(&batch, &def),
-            Some("mrn")
-        );
+        batch.row_count = 2;
+        assert_eq!(crate::converter::ungrouped_rows(&batch), 2);
 
         batch
             .columns
-            .insert("groupByKey".into(), vec![Some("1".into())]);
-        assert_eq!(crate::converter::missing_group_key(&batch, &def), None);
+            .insert("groupByKey".into(), vec![Some("1".into()), None]);
+        assert_eq!(crate::converter::ungrouped_rows(&batch), 1);
 
-        batch.columns.insert("groupByKey".into(), vec![None]);
-        assert_eq!(
-            crate::converter::missing_group_key(&batch, &def),
-            Some("mrn")
+        batch.columns.insert(
+            "groupByKey".into(),
+            vec![Some("1".into()), Some("2".into())],
         );
+        assert_eq!(crate::converter::ungrouped_rows(&batch), 0);
+    }
+
+    #[test]
+    fn strict_mode_stops_when_only_some_rows_lack_a_group_key() {
+        let def = file_def();
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n,4\n"),
+            strict_options(&contract, &def, &registry),
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows.len(), 1);
+        let message = rows[0].exception.as_ref().unwrap().to_string();
+        assert!(message.contains("1 row(s)"), "{message}");
     }
 
     #[test]

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Clone, Default)]
 pub struct ConvertRequest {
@@ -118,7 +118,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let registry = TaskRegistry::new();
     fs::create_dir_all(&request.output)?;
     if fs::read_dir(&request.output)?.next().is_some() {
-        warn!(
+        info!(
             output = %request.output.display(),
             "output directory is not empty; files from earlier runs are left in place"
         );

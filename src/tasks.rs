@@ -58,23 +58,31 @@ impl Default for TaskRegistry {
     }
 }
 
+#[derive(Debug)]
+pub struct TaskFailure {
+    pub task: String,
+    pub error: Error,
+}
+
 pub fn execute_task_chain(
     batch: &mut RecordBatch,
     tasks: &[crate::contract::Task],
     registry: &TaskRegistry,
-) -> Vec<Error> {
-    let mut errors = Vec::new();
+) -> Vec<TaskFailure> {
+    let mut failures = Vec::new();
     for task in tasks {
-        if let Some(task_fn) = registry.get(&task.task) {
-            let params = task.params.clone();
-            if let Err(e) = task_fn(batch, &params) {
-                errors.push(e);
-            }
-        } else {
-            errors.push(Error::UnknownTask(task.task.clone()));
+        let outcome = match registry.get(&task.task) {
+            Some(task_fn) => task_fn(batch, &task.params.clone()),
+            None => Err(Error::UnknownTask(task.task.clone())),
+        };
+        if let Err(error) = outcome {
+            failures.push(TaskFailure {
+                task: task.task.clone(),
+                error,
+            });
         }
     }
-    errors
+    failures
 }
 
 fn add_constant(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
@@ -441,7 +449,7 @@ mod tests {
 
         let errors = execute_task_chain(&mut batch, &tasks, &registry);
         assert_eq!(errors.len(), 1);
-        assert!(matches!(errors[0], Error::UnknownTask(_)));
+        assert!(matches!(errors[0].error, Error::UnknownTask(_)));
         assert_eq!(
             batch.get_column("good_col").unwrap(),
             &vec![Some("good_val".into()), Some("good_val".into())]
@@ -465,6 +473,6 @@ mod tests {
 
         let errors = execute_task_chain(&mut batch, &tasks, &registry);
         assert_eq!(errors.len(), 1);
-        assert!(matches!(errors[0], Error::MissingTaskParam(_)));
+        assert!(matches!(errors[0].error, Error::MissingTaskParam(_)));
     }
 }

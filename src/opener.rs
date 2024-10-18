@@ -34,7 +34,13 @@ impl LocalOpener {
 impl Opener for LocalOpener {
     fn open(&self, source: &str) -> Result<Box<dyn Source>, Error> {
         match scheme(source) {
-            None | Some("file") => Ok(Box::new(File::open(self.resolve(source))?)),
+            None | Some("file") => {
+                let path = self.resolve(source);
+                let file = File::open(&path).map_err(|error| {
+                    Error::Config(format!("cannot open {}: {error}", path.display()))
+                })?;
+                Ok(Box::new(file))
+            }
             Some(scheme) => Err(unsupported(scheme, source)),
         }
     }
