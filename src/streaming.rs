@@ -24,7 +24,7 @@ pub struct ChunkedReader<R: Read + Seek> {
     headers: Vec<String>,
     widths: Vec<HeaderDict>,
     skip_rows: Vec<usize>,
-    has_explicit_headers: bool,
+    header_row: Option<usize>,
     row_index: usize,
     next_row_num: usize,
     finished: bool,
@@ -33,29 +33,38 @@ pub struct ChunkedReader<R: Read + Seek> {
 impl<R: Read + Seek> ChunkedReader<R> {
     pub fn new(mut reader: R, params: ReaderParams, buffer_size: usize) -> Result<Self, Error> {
         let skip_rows = resolve_skip_rows(&params.skiprows)?;
-        let has_explicit_headers = params.headers.is_some();
         let buffer_size = if buffer_size == 0 {
             usize::MAX
         } else {
             buffer_size
         };
 
-        let (source, headers, widths) = match params.file_type {
+        let (source, headers, widths, header_row) = match params.file_type {
             FileType::Csv => {
-                let headers = resolve_headers(&mut reader, &params)?;
+                let (headers, header_row) = resolve_headers(&mut reader, &params, &skip_rows)?;
                 reader.seek(SeekFrom::Start(0))?;
                 let csv_reader = ReaderBuilder::new()
                     .delimiter(params.value_delimiter as u8)
                     .has_headers(false)
                     .flexible(true)
                     .from_reader(reader);
-                (Source::Delimited(Box::new(csv_reader)), headers, Vec::new())
+                (
+                    Source::Delimited(Box::new(csv_reader)),
+                    headers,
+                    Vec::new(),
+                    header_row,
+                )
             }
             FileType::FixedWidth => {
                 let widths = resolve_fixed_width_headers(&params.headers)?;
                 reader.seek(SeekFrom::Start(0))?;
                 let headers = widths.iter().map(|h| h.name.clone()).collect();
-                (Source::FixedWidth(BufReader::new(reader)), headers, widths)
+                (
+                    Source::FixedWidth(BufReader::new(reader)),
+                    headers,
+                    widths,
+                    None,
+                )
             }
         };
 
@@ -66,7 +75,7 @@ impl<R: Read + Seek> ChunkedReader<R> {
             headers,
             widths,
             skip_rows,
-            has_explicit_headers,
+            header_row,
             row_index: 0,
             next_row_num: 1,
             finished: false,
@@ -85,7 +94,7 @@ impl<R: Read + Seek> ChunkedReader<R> {
             headers,
             widths,
             skip_rows,
-            has_explicit_headers,
+            header_row,
             row_index,
             next_row_num,
             finished,
@@ -100,7 +109,7 @@ impl<R: Read + Seek> ChunkedReader<R> {
                 for result in reader.records() {
                     let record = result?;
 
-                    if !*has_explicit_headers && *row_index == 0 {
+                    if Some(*row_index) == *header_row {
                         *row_index += 1;
                         continue;
                     }
@@ -298,6 +307,23 @@ mod tests {
             chunk.batch.get_column("a").unwrap(),
             &vec![Some("1".into()), Some("3".into())]
         );
+    }
+
+    #[test]
+    fn skiprows_runs_before_the_header_is_inferred() {
+        let data = "# nightly export\na,b\n1,2\n3,4\n";
+        let mut def = csv_def();
+        def.skiprows = Some(SkipRows::Single(0));
+        let p = params(&def, &general());
+        let mut reader = ChunkedReader::new(Cursor::new(data), p, 10).unwrap();
+
+        let chunk = reader.next_chunk().unwrap().unwrap();
+        assert_eq!(chunk.batch.row_count, 2);
+        assert_eq!(
+            chunk.batch.get_column("a").unwrap(),
+            &vec![Some("1".into()), Some("3".into())]
+        );
+        assert!(chunk.batch.get_column("# nightly export").is_none());
     }
 
     #[test]

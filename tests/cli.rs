@@ -213,6 +213,34 @@ fn convert_file_mode_requires_a_config_directory() {
 }
 
 #[test]
+fn validate_resolves_external_definitions_next_to_the_contract() {
+    let base = tempfile::TempDir::new().unwrap();
+    std::fs::write(
+        base.path().join("patient-definition.json"),
+        r#"{"fileType": "csv", "resourceType": "Patient", "groupByKey": "mrn"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        base.path().join("data-contract.json"),
+        r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {"patient": "patient-definition.json"}}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .args(["validate", "-f"])
+        .arg(base.path().join("data-contract.json"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn validate_reports_a_missing_file() {
     let output = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
         .args(["validate", "-f", "no-such-contract.json"])

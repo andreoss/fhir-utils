@@ -89,7 +89,18 @@ fn skipped_detail(names: &[String]) -> String {
 }
 
 fn run_validate(file: &str) -> Result<(), Error> {
-    let content = fs::read_to_string(file)?;
+    let path = PathBuf::from(file);
+    let directory = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty());
+    if let Some(directory) = directory {
+        fhir_utils::opener::set_opener(std::sync::Arc::new(fhir_utils::opener::LocalOpener::new(
+            directory,
+        )));
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|error| Error::Config(format!("cannot open {file}: {error}")))?;
     Contract::load(&content)?;
     println!("Contract is valid");
     Ok(())
