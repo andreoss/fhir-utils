@@ -136,13 +136,61 @@ example `mrn`, `nameLast`, `gender`, `birthDate`, `ssn`.
   supplies the column names.
 - Input files matching no definition are skipped and named in the summary.
 
+== Resource keys
+
+`Patient`, `AllergyIntolerance`, `Condition`, `Encounter`, `Immunization`, `Observation`,
+`Location`, `Organization`, `Practitioner`, `Procedure`, `MedicationUse`,
+`MedicationAdministration`, `MedicationRequest`, `MedicationStatement`,
+`DocumentReference`, `DiagnosticReport`, `Unstructured`, `Basic`.
+
+== Tasks
+
+Default chain, in order: `add_row_num`, `set_nan_to_none`,
+`remove_whitespace_from_columns`, `copy_columns` into `groupByKey`, then `add_constant`
+per `general` key plus `filePath` and `configResourceType`. User tasks run after it.
+
+[cols="1,3"]
+|===
+| Task | Parameters
+| `add_constant` | `name`, `value` as string, number, boolean or list
+| `add_row_num` | `starting_index`
+| `append_list` | `source_columns`, `target_column`, `discard_if_duplicate`
+| `build_object_array` | `entry_class`, `target_column`, `entries`
+| `change_case` | `columns`, `casing` as `UPPER` or `LOWER`
+| `compare_to_date` | `column`, `target_column`, `compare_date`, `comparison`, `true_string`, `false_string`
+| `conditional_column` | `source_column`, `target_column`, `condition_map`
+| `conditional_column_update` | `source_column`, `target_column`, `condition_map`
+| `condition_column_with_prerequisite` | + `prerequisite_column`, `prerequisite_match`
+| `convert_to_list` | `column`, `separator`
+| `copy_columns` | `columns`, `target_column`, `value_separator`
+| `filter_to_columns` | `source_column`, `target_columns`, `filters`
+| `find_not_null_value` | `columns`, `target_column`
+| `format_date` | `columns`, `date_format`
+| `join_data` | `secondary_data_source`, `join_type`, `join_on`; optional `source_type`, `reader_params`
+| `map_codes` | `code_map`
+| `remove_whitespace_from_columns` | none
+| `rename_columns` | `column_map`
+| `replace_text` | `column_name`, `match`, `replacement`, `options`
+| `set_nan_to_none` | none
+| `split_column` | `column_name`, `new_column_names`, `delimiter` or `indices`
+| `split_row` | `columns`, `split_column_name`, `split_value_column_name`
+| `validate_value` | `column_name`, `regex`, `no_match_replacement`
+|===
+
+- Tasks run in order over one chunk at a time; a failing task is logged and the chain continues.
+- List valued cells are strings joined with `|`.
+- `condition_map` and `code_map` take an inline object or a CSV file with
+  `source_value` and `target_value` columns; a `null` or empty target clears the cell.
+- Unknown tasks and unknown or missing parameters are rejected when the contract loads.
+
 == Output
 
 - Path: `<out>/<groupByKey>/<groupByKey>-<resourceType>-<safeFileId>-<nnnnn>.json`.
 - The counter runs per group key, resource type and source file.
 - JSON is pretty printed with sorted keys.
-- `safeFileId` and group key values are made file-system safe: everything outside
-  `[A-Za-z0-9-]` becomes `_`.
+- `safeFileId` keeps `[A-Za-z0-9-]` and maps every other character to `_`.
+- Group key directories keep letters, digits, spaces and dots; path separators, control
+  characters and `\ : * ? " < > |` become `_`, and an all-dot key becomes `_`.
 - Re-running overwrites matching file names and leaves earlier files in place.
 - The summary goes to standard output; warnings and errors go to standard error.
 - Warnings print by default; `RUST_LOG=info` adds per-file detail.

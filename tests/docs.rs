@@ -3,11 +3,8 @@ use fhir_utils::TaskRegistry;
 use std::fs;
 use std::path::PathBuf;
 
-fn doc(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("doc")
-        .join(name);
-    fs::read_to_string(path).unwrap()
+fn readme() -> String {
+    fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("README.adoc")).unwrap()
 }
 
 fn first_column_codes(content: &str, section: &str) -> Vec<String> {
@@ -31,8 +28,8 @@ fn first_column_codes(content: &str, section: &str) -> Vec<String> {
 }
 
 #[test]
-fn the_task_reference_lists_every_registered_task() {
-    let documented = first_column_codes(&doc("Tasks.adoc"), "== Tasks");
+fn the_task_table_lists_every_registered_task() {
+    let documented = first_column_codes(&readme(), "== Tasks");
     let registered = TaskRegistry::new().names();
 
     assert!(!documented.is_empty());
@@ -40,23 +37,32 @@ fn the_task_reference_lists_every_registered_task() {
 }
 
 #[test]
-fn the_contract_reference_lists_every_resource_key() {
-    let content = doc("DataContract.adoc");
+fn every_resource_key_is_documented() {
+    let content = readme();
     for (key, _) in RESOURCE_KEYS {
         assert!(
             content.contains(&format!("`{key}`")),
-            "resource key missing from the contract reference: {key}"
+            "resource key missing from the readme: {key}"
         );
     }
 }
 
 #[test]
-fn the_cli_reference_lists_every_command() {
-    let content = doc("Cli.adoc");
-    for command in ["validate", "convert", "-d", "-f", "-c", "-o"] {
-        assert!(
-            content.contains(command),
-            "cli reference is missing: {command}"
-        );
+fn every_command_and_flag_is_documented() {
+    let content = readme();
+    for item in [
+        "validate",
+        "convert",
+        "-d",
+        "-f",
+        "-c",
+        "-o",
+        "--strict",
+        "RUST_LOG",
+        "CSV_BUFFER_SIZE",
+        "MAPPING_CONFIG_DIRECTORY",
+        "MAPPING_CONFIG_FILE_NAME",
+    ] {
+        assert!(content.contains(item), "readme is missing: {item}");
     }
 }

@@ -62,8 +62,7 @@ fn the_quickstart_example_converts_as_documented() {
 #[test]
 fn the_quickstart_document_matches_its_fixtures() {
     let doc =
-        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("doc/Quickstart.adoc"))
-            .unwrap();
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("README.adoc")).unwrap();
     let contract = fs::read_to_string(fixtures().join("config/data-contract.json")).unwrap();
     let extract = fs::read_to_string(fixtures().join("input/patients.csv")).unwrap();
     let codes = fs::read_to_string(fixtures().join("config/sex.csv")).unwrap();
