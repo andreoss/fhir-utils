@@ -82,6 +82,7 @@
     }
   ],
   "resourceType": "DiagnosticReport",
+  "status": "unknown",
   "subject": {
     "reference": "Patient/p1"
   }

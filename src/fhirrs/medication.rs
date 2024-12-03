@@ -118,10 +118,9 @@ fn build(
             {
                 resource.insert("authoredOn".into(), json!(authored));
             }
-            common::insert_str(
-                &mut resource,
-                "intent",
-                builders::field(&record, "medicationRequestIntent"),
+            resource.insert(
+                "intent".into(),
+                json!(builders::field(&record, "medicationRequestIntent").unwrap_or("order")),
             );
             common::insert(&mut resource, "dispenseRequest", dispense_request(&record));
             if builders::field(&record, "encounterClaimType").is_some()
@@ -259,6 +258,13 @@ mod tests {
     use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
     use serde_json::json;
+
+    #[test]
+    fn request_intent_defaults_when_the_source_omits_it() {
+        let record = json!({"medicationCode": "1049502"});
+        let request = convert_request("g1", &record, &meta()).unwrap().remove(0);
+        assert_eq!(request["intent"], json!("order"));
+    }
 
     #[test]
     fn no_medication_code_produces_no_resource() {

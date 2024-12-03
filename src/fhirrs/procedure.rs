@@ -68,10 +68,9 @@ pub fn convert_record(
         resources.extend(practitioners);
     }
 
-    common::insert_str(
-        &mut procedure,
-        "status",
-        builders::field(&record, "procedureStatus"),
+    procedure.insert(
+        "status".into(),
+        json!(builders::field(&record, "procedureStatus").unwrap_or("unknown")),
     );
     common::insert(
         &mut procedure,
@@ -198,6 +197,13 @@ mod tests {
             .iter()
             .find(|resource| resource["resourceType"] == json!(resource_type))
             .unwrap()
+    }
+
+    #[test]
+    fn status_defaults_when_the_source_omits_it() {
+        let record = json!({"procedureCode": "0DTJ0ZZ"});
+        let procedure = convert_record("g1", &record, &meta()).unwrap().remove(0);
+        assert_eq!(procedure["status"], json!("unknown"));
     }
 
     #[test]

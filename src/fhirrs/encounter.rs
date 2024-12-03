@@ -45,10 +45,9 @@ pub fn build(
     if let Some(identifier_values) = identifiers::identifier_list(&identifier_record) {
         common::insert_list(&mut encounter, "identifier", identifier_values);
     }
-    common::insert_str(
-        &mut encounter,
-        "status",
-        builders::field(record, "encounterStatus"),
+    encounter.insert(
+        "status".into(),
+        json!(builders::field(record, "encounterStatus").unwrap_or("unknown")),
     );
     common::insert(
         &mut encounter,
@@ -452,6 +451,13 @@ mod tests {
         assert!(types.contains(&"VN"));
         assert!(types.contains(&"RI"));
         assert!(types.contains(&"PI"));
+    }
+
+    #[test]
+    fn status_defaults_when_the_source_omits_it() {
+        let resources =
+            convert_record("g1", &json!({"encounterInternalId": "e1"}), &meta()).unwrap();
+        assert_eq!(encounter_of(&resources)["status"], json!("unknown"));
     }
 
     #[test]

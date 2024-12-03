@@ -76,6 +76,7 @@
     ]
   },
   "resourceType": "Encounter",
+  "status": "unknown",
   "subject": {
     "reference": "Patient/p1"
   }

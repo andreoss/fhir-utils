@@ -110,10 +110,9 @@ fn build(
     let encounter_reference = common::encounter_reference(&record);
 
     if kind == DIAGNOSTIC_REPORT {
-        common::insert_str(
-            &mut resource,
-            "status",
-            builders::field(&record, "documentStatus"),
+        resource.insert(
+            "status".into(),
+            json!(builders::field(&record, "documentStatus").unwrap_or("unknown")),
         );
         common::insert(&mut resource, "code", code);
         common::insert(&mut resource, "encounter", encounter_reference);
@@ -177,6 +176,15 @@ mod tests {
     use crate::fhirrs::unstructured::*;
     use crate::fhirutils::constants;
     use serde_json::json;
+
+    #[test]
+    fn report_status_defaults_when_the_source_omits_it() {
+        let record = json!({"documentAttachmentContent": "body"});
+        let report = convert_diagnostic_report("g1", &record, &meta())
+            .unwrap()
+            .remove(0);
+        assert_eq!(report["status"], json!("unknown"));
+    }
 
     #[test]
     fn no_attachment_content_produces_no_resource() {
