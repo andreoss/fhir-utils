@@ -4,6 +4,7 @@ pub mod common;
 pub mod condition;
 pub mod dispatch;
 pub mod encounter;
+pub mod fields;
 pub mod immunization;
 pub mod location;
 pub mod medication;

@@ -101,7 +101,10 @@ fn run_validate(file: &str) -> Result<(), Error> {
 
     let content = fs::read_to_string(&path)
         .map_err(|error| Error::Config(format!("cannot open {file}: {error}")))?;
-    Contract::load(&content)?;
+    let contract = Contract::load(&content)?;
+    for warning in contract.lint() {
+        eprintln!("warning: {warning}");
+    }
     println!("Contract is valid");
     Ok(())
 }

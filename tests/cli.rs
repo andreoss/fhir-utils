@@ -249,3 +249,42 @@ fn validate_reports_a_missing_file() {
     assert!(!output.status.success());
     assert!(!output.stderr.is_empty());
 }
+
+#[test]
+fn a_task_target_no_resource_reads_is_reported() {
+    let base = fixture_tree();
+    let contract = base.path().join("config/data-contract.json");
+    std::fs::write(
+        &contract,
+        r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "patient": {"fileType": "csv", "resourceType": "Patient",
+                    "groupByKey": "patientInternalId",
+                    "tasks": [{"task": "rename_columns", "column_map": {"nameLast": "nameLastt"}}]}
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let validated = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .args(["validate", "-f"])
+        .arg(&contract)
+        .output()
+        .unwrap();
+    assert!(validated.status.success());
+    let notes = String::from_utf8_lossy(&validated.stderr);
+    assert!(notes.contains("nameLastt"), "{notes}");
+
+    let strict = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(base.path().join("out"))
+        .arg("--strict")
+        .output()
+        .unwrap();
+    assert!(!strict.status.success());
+    assert!(String::from_utf8_lossy(&strict.stderr).contains("nameLastt"));
+}
