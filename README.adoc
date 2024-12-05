@@ -220,7 +220,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
   characters and `\ : * ? " < > |` become `_`, and an all-dot key becomes `_`.
 - Re-running overwrites matching file names and leaves earlier files in place.
 - The summary goes to standard output; warnings and errors go to standard error.
-- Warnings print by default; `RUST_LOG=info` adds per-file detail.
+- Warnings print by default; `RUST_LOG=info` adds a line per file with its row and
+  resource counts, which is the only progress signal on a long run.
 
 == Required field defaults
 
