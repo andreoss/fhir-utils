@@ -94,3 +94,18 @@ fn rows_without_a_group_key_use_the_default_bucket() {
     assert_eq!(patient["name"][0]["family"], "Solo");
     assert_eq!(patient["id"], "NoGroupByKey");
 }
+
+#[test]
+fn a_latin_one_input_names_the_file_and_the_re_encoding_fix() {
+    let base = tree(b"mrn,nameLast\n123,Beno\xeet\n");
+    let output = base.path().join("out");
+    let request = ConvertRequest::directory(base.path().to_path_buf(), output);
+    let message = match run_convert(&request) {
+        Ok(summary) => panic!("expected a failure, got {summary:?}"),
+        Err(error) => error.to_string(),
+    };
+
+    assert!(message.contains("not valid UTF-8"), "{message}");
+    assert!(message.contains("iconv"), "{message}");
+    assert!(message.contains("patient.csv"), "{message}");
+}

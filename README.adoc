@@ -28,12 +28,13 @@ cargo test                                                   # unit, integration
 | Flag | Meaning | Required
 | `-f`, `--file` | contract file for `validate`, input file for `convert` | yes for `validate`
 | `-d`, `--directory` | base directory holding `input/` and `config/` | one of `-d` or `-f`
-| `-c`, `--config-dir` | directory holding the contract | with `-f`
+| `-c`, `--config-dir` | directory holding the contract | with `-f`, unless `MAPPING_CONFIG_DIRECTORY` is set
 | `-o`, `--output` | output directory, created when missing | yes for `convert`
 | `--strict` | fail on a task error or an empty group key | no
 |===
 
-`-d` and `-f` are mutually exclusive, `-f` requires `-c`, and `-d` requires both
+`-d` and `-f` are mutually exclusive; `-f` without `-c` reads the contract from
+`MAPPING_CONFIG_DIRECTORY`, and `-d` requires both
 `<base>/input` and `<base>/config`. Exit code `0` on success, `1` on an invalid
 contract, a missing path or a row conversion failure.
 
@@ -135,6 +136,7 @@ outside that list travels through the pipeline but never reaches the resource.
 - Fixed-width files need a width form of `headers`; otherwise the first remaining line
   supplies the column names.
 - Input files matching no definition are skipped and named in the summary.
+- Repeated column names keep the last column of the row.
 
 == Resource keys
 
@@ -254,6 +256,7 @@ not carry clinical meaning.
 | Task failure | warning, pipeline continues; fatal with `--strict`
 | Task target no field reads | warning at load; fatal with `--strict`
 | Rows without a group key | warning once per file; fatal with `--strict`
+| Input that is not UTF-8 | run stops naming the file and the re-encoding command
 | Row conversion error | run stops with the group key and file
 |===
 
@@ -262,8 +265,8 @@ not carry clinical meaning.
 [cols="1,2,1"]
 |===
 | Variable | Meaning | Default
-| `CSV_BUFFER_SIZE` | rows per chunk | `1000`
-| `MAPPING_CONFIG_DIRECTORY` | contract directory | `/var/app/config`
+| `CSV_BUFFER_SIZE` | rows per chunk; `0` reads the whole file into memory | `1000`
+| `MAPPING_CONFIG_DIRECTORY` | contract directory used when `-c` is absent | `/var/app/config`
 | `MAPPING_CONFIG_FILE_NAME` | contract file name | `data-contract.json`
 |===
 

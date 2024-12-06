@@ -99,6 +99,24 @@ impl Counters {
     }
 }
 
+/// Turns a row or reader failure into a message naming the file and the likely fix.
+fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
+    if let Error::Csv(csv_error) = &error {
+        if matches!(csv_error.kind(), csv::ErrorKind::Utf8 { .. }) {
+            return Error::Config(format!(
+                "{file_path} is not valid UTF-8: {csv_error}; re-encode it first, \
+                 for example with iconv -f windows-1252 -t utf-8"
+            ));
+        }
+    }
+    match error {
+        Error::Conversion(_) => error,
+        other if group_by_key.is_empty() => {
+            Error::Conversion(format!("{file_path} failed: {other}"))
+        }
+        other => Error::Conversion(format!("row {group_by_key} in {file_path} failed: {other}")),
+    }
+}
 pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let (inputs, config_dir) = resolve_inputs(request)?;
     let contract_path = config_dir.join(&config().mapping_config_file_name);
@@ -123,8 +141,20 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         warn!("{warning}");
     }
     let registry = TaskRegistry::new();
-    fs::create_dir_all(&request.output)?;
-    if fs::read_dir(&request.output)?.next().is_some() {
+    let output = &request.output;
+    fs::create_dir_all(output).map_err(|error| {
+        Error::Config(format!(
+            "cannot create output directory {}: {error}",
+            output.display()
+        ))
+    })?;
+    let mut entries = fs::read_dir(output).map_err(|error| {
+        Error::Config(format!(
+            "cannot read output directory {}: {error}",
+            output.display()
+        ))
+    })?;
+    if entries.next().is_some() {
         info!(
             output = %request.output.display(),
             "output directory is not empty; files from earlier runs are left in place"
@@ -158,16 +188,12 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         summary.files += 1;
         let written = summary.resources;
         let mut rows = 0usize;
-        for row in convert(&input, options)? {
+        let rows_iter =
+            convert(&input, options).map_err(|error| input_failure(&file_path, "", error))?;
+        for row in rows_iter {
             rows += 1;
             if let Some(error) = row.exception {
-                return Err(match error {
-                    Error::Conversion(_) => error,
-                    other => Error::Conversion(format!(
-                        "row {} in {file_path} failed: {other}",
-                        row.group_by_key
-                    )),
-                });
+                return Err(input_failure(&file_path, &row.group_by_key, error));
             }
             for resource in row.resources {
                 write_resource(&request.output, &row.group_by_key, &resource, &mut counters)?;
@@ -210,10 +236,8 @@ fn resolve_inputs(request: &ConvertRequest) -> Result<(Vec<PathBuf>, PathBuf), E
         .file
         .as_ref()
         .ok_or_else(|| Error::Config("convert needs -d or -f".into()))?;
-    let config_dir = request
-        .config_dir
-        .as_ref()
-        .ok_or_else(|| Error::Config("-f requires -c".into()))?;
+    let fallback = PathBuf::from(&config().mapping_config_directory);
+    let config_dir = request.config_dir.as_ref().unwrap_or(&fallback);
     if !file.is_file() {
         return Err(Error::Config(format!(
             "input file not found: {}",
