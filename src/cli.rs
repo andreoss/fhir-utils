@@ -73,7 +73,9 @@ impl ConvertRequest {
 #[derive(Debug, Default, PartialEq)]
 pub struct ConvertSummary {
     pub files: usize,
+    pub rows: usize,
     pub resources: usize,
+    pub empty_rows: usize,
     pub skipped_files: Vec<String>,
 }
 
@@ -99,6 +101,17 @@ impl Counters {
     }
 }
 
+/// Row numbers for a diagnostic, listing at most the first five.
+fn row_numbers(rows: &[usize]) -> String {
+    let shown: Vec<String> = rows.iter().take(5).map(usize::to_string).collect();
+    let rest = rows.len().saturating_sub(shown.len());
+    if rest > 0 {
+        format!("rows {} and {rest} more", shown.join(", "))
+    } else {
+        format!("rows {}", shown.join(", "))
+    }
+}
+
 /// Turns a row or reader failure into a message naming the file and the likely fix.
 fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
     if let Error::Csv(csv_error) = &error {
@@ -117,6 +130,7 @@ fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
         other => Error::Conversion(format!("row {group_by_key} in {file_path} failed: {other}")),
     }
 }
+
 pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let (inputs, config_dir) = resolve_inputs(request)?;
     let contract_path = config_dir.join(&config().mapping_config_file_name);
@@ -188,6 +202,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         summary.files += 1;
         let written = summary.resources;
         let mut rows = 0usize;
+        let mut empty: Vec<usize> = Vec::new();
         let rows_iter =
             convert(&input, options).map_err(|error| input_failure(&file_path, "", error))?;
         for row in rows_iter {
@@ -195,10 +210,30 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
             if let Some(error) = row.exception {
                 return Err(input_failure(&file_path, &row.group_by_key, error));
             }
+            if row.resources.is_empty() {
+                empty.push(row.row_num);
+            }
             for resource in row.resources {
                 write_resource(&request.output, &row.group_by_key, &resource, &mut counters)?;
                 summary.resources += 1;
             }
+        }
+        summary.rows += rows;
+        summary.empty_rows += empty.len();
+        if !empty.is_empty() {
+            let detail = row_numbers(&empty);
+            if request.strict {
+                return Err(Error::Conversion(format!(
+                    "{} of {rows} rows in {file_path} produced no resource: {detail}",
+                    empty.len()
+                )));
+            }
+            warn!(
+                file = %file_path,
+                rows,
+                empty = empty.len(),
+                "rows produced no resource: {detail}"
+            );
         }
         info!(
             file = %input.display(),

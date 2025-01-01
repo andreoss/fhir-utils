@@ -30,7 +30,7 @@ cargo test                                                   # unit, integration
 | `-d`, `--directory` | base directory holding `input/` and `config/` | one of `-d` or `-f`
 | `-c`, `--config-dir` | directory holding the contract | with `-f`, unless `MAPPING_CONFIG_DIRECTORY` is set
 | `-o`, `--output` | output directory, created when missing | yes for `convert`
-| `--strict` | fail on a task error or an empty group key | no
+| `--strict` | fail on a task error, an empty group key or a row that builds nothing | no
 |===
 
 `-d` and `-f` are mutually exclusive; `-f` without `-c` reads the contract from
@@ -193,7 +193,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 | `find_not_null_value` | `columns`, `target_column`
 | `format_date` | `columns`, `date_format`
 | `join_data` | `secondary_data_source`, `join_type`, `join_on`; optional `source_type`, `reader_params`
-| `map_codes` | `code_map`
+| `map_codes` | `code_map`, whose per-column map takes a `default` for unlisted values
 | `remove_whitespace_from_columns` | none
 | `rename_columns` | `column_map`
 | `replace_text` | `column_name`, `match`, `replacement`, `options`
@@ -207,6 +207,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - List valued cells are strings joined with `|`.
 - `condition_map` and `code_map` take an inline object or a CSV file with
   `source_value` and `target_value` columns; a `null` or empty target clears the cell.
+- A value the code map does not list passes through unchanged, which is reported once per
+  file and column; add a `default` entry to control it.
 - Unknown tasks and unknown or missing parameters are rejected when the contract loads.
 - A task target that neither a later task nor the resource reads is reported by
   `validate` and warned about during `convert`; `--strict` makes it fail the run. It
@@ -221,6 +223,12 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - Group key directories keep letters, digits, spaces and dots; path separators, control
   characters and `\ : * ? " < > |` become `_`, and an all-dot key becomes `_`.
 - Re-running overwrites matching file names and leaves earlier files in place.
+- The summary counts files, rows read, resources written and rows that produced none.
+- A row whose record carries no usable code produces no resource; those rows are counted
+  in the summary, listed by row number on standard error, and fatal with `--strict`.
+- Resource ids are generated per run unless the contract maps `resourceInternalId`, so a
+  reload creates new ids; the `urn:id:extID` identifier and the `urn:id:source-file-id`
+  extension, which carries `<file>:<rowNum>`, stay stable and are the keys to match on.
 - The summary goes to standard output; warnings and errors go to standard error.
 - Warnings print by default; `RUST_LOG=info` adds a line per file with its row and
   resource counts, which is the only progress signal on a long run.
@@ -256,6 +264,8 @@ not carry clinical meaning.
 | Task failure | warning, pipeline continues; fatal with `--strict`
 | Task target no field reads | warning at load; fatal with `--strict`
 | Rows without a group key | warning once per file; fatal with `--strict`
+| Rows producing no resource | counted in the summary and listed; fatal with `--strict`
+| Unlisted code map value | warning once per file and column, value passes through
 | Input that is not UTF-8 | run stops naming the file and the re-encoding command
 | Row conversion error | run stops with the group key and file
 |===

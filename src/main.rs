@@ -74,6 +74,14 @@ fn main() {
     }
 }
 
+fn empty_detail(empty_rows: usize) -> String {
+    if empty_rows == 0 {
+        String::new()
+    } else {
+        format!(", {empty_rows} row(s) produced no resource")
+    }
+}
+
 fn skipped_detail(names: &[String]) -> String {
     if names.is_empty() {
         return String::new();
@@ -128,9 +136,11 @@ fn run_conversion(
         strict,
     })?;
     println!(
-        "Converted {} file(s), wrote {} resource(s), skipped {} file(s){}",
+        "Converted {} file(s), read {} row(s), wrote {} resource(s){}, skipped {} file(s){}",
         summary.files,
+        summary.rows,
         summary.resources,
+        empty_detail(summary.empty_rows),
         summary.skipped(),
         skipped_detail(&summary.skipped_files)
     );
