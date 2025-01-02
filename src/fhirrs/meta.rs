@@ -83,6 +83,7 @@ mod tests {
             assigning_authority: None,
             empty_field_values: None,
             regex_filenames: false,
+            extra: Default::default(),
         }
     }
 

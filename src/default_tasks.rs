@@ -100,6 +100,18 @@ pub fn build_default_task_chain_with_start(
         ]),
     });
 
+    let mut extra: Vec<(&String, &serde_json::Value)> = general.extra.iter().collect();
+    extra.sort_by_key(|(name, _)| name.as_str());
+    for (name, value) in extra {
+        tasks.push(crate::contract::Task {
+            task: "add_constant".into(),
+            params: HashMap::from([
+                ("name".into(), json!(name)),
+                ("value".into(), value.clone()),
+            ]),
+        });
+    }
+
     tasks.push(crate::contract::Task {
         task: "add_constant".into(),
         params: HashMap::from([
@@ -158,6 +170,7 @@ mod tests {
             assigning_authority: Some("1.2.3.4.5".into()),
             empty_field_values: Some(vec!["".into(), "NA".into(), "N/A".into(), "null".into()]),
             regex_filenames: false,
+            extra: Default::default(),
         }
     }
 
@@ -413,5 +426,21 @@ mod tests {
             batch.get_column("after_error").unwrap(),
             &vec![Some("val".into()), Some("val".into())]
         );
+    }
+
+    #[test]
+    fn further_general_keys_become_row_constants() {
+        let mut general = make_general();
+        general.extra.insert("sourceSystem".into(), json!("epic"));
+        let file_def = make_file_def();
+
+        let tasks = build_default_task_chain(&general, &file_def, "in.csv", "Patient");
+        let constant = tasks
+            .iter()
+            .find(|task| task.params.get("name") == Some(&json!("sourceSystem")))
+            .expect("the extra general key is injected");
+
+        assert_eq!(constant.task, "add_constant");
+        assert_eq!(constant.params.get("value"), Some(&json!("epic")));
     }
 }

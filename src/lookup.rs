@@ -6,6 +6,14 @@ pub fn lookup_file_definition<'a>(
     contract: &'a Contract,
     filename: &str,
 ) -> Result<&'a crate::contract::FileDefinition, Error> {
+    matched_definition(contract, filename).map(|(_, definition)| definition)
+}
+
+/// The matching definition and the contract key that selected it.
+pub fn matched_definition<'a>(
+    contract: &'a Contract,
+    filename: &str,
+) -> Result<(&'a str, &'a crate::contract::FileDefinition), Error> {
     for matcher in ordered_matchers(contract) {
         let definition = &contract.file_definitions[matcher];
         let matched = if contract.general.regex_filenames {
@@ -16,7 +24,7 @@ pub fn lookup_file_definition<'a>(
             filename.contains(matcher)
         };
         if matched {
-            return Ok(definition);
+            return Ok((matcher, definition));
         }
     }
 
@@ -79,6 +87,7 @@ mod tests {
                 assigning_authority: None,
                 empty_field_values: None,
                 regex_filenames,
+                extra: Default::default(),
             },
             file_definitions,
         }

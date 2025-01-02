@@ -170,6 +170,7 @@ mod tests {
             assigning_authority: None,
             empty_field_values: Some(vec!["".into(), "NA".into(), "N/A".into(), "null".into()]),
             regex_filenames: false,
+            extra: Default::default(),
         }
     }
 
