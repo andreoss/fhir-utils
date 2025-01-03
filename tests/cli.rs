@@ -183,11 +183,12 @@ fn convert_names_skipped_files_and_warns_about_stale_output() {
         .unwrap();
     let logs = String::from_utf8_lossy(&verbose.stderr);
     assert!(logs.contains("output directory is not empty"), "{logs}");
-    assert!(
-        logs.contains("converted") && logs.contains("rows=1"),
-        "{logs}"
-    );
     assert!(logs.contains("no file definition matched"), "{logs}");
+    let verbose_summary = String::from_utf8_lossy(&verbose.stdout);
+    assert!(
+        verbose_summary.contains("read 1 row(s)"),
+        "{verbose_summary}"
+    );
 }
 
 #[test]
