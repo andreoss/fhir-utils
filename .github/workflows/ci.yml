@@ -8,6 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   COVERAGE_FLOOR: "85"
+  RUST_BACKTRACE: "1"
 
 jobs:
   build:
@@ -18,6 +19,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy, llvm-tools-preview
+
+      - name: Resolve dependencies
+        run: cargo generate-lockfile
 
       - uses: Swatinem/rust-cache@v2
 
