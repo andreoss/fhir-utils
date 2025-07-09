@@ -1,0 +1,39 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "test-tenant",
+    "streamType": "live",
+    "assigningAuthority": "1.2.3.4.5",
+    "emptyFieldValues": ["", "NA", "N/A", "null"],
+    "regexFilenames": false
+  },
+  "fileDefinitions": {
+    "patient": {
+      "fileType": "csv",
+      "valueDelimiter": ",",
+      "convertColumnsToString": true,
+      "resourceType": "Patient",
+      "groupByKey": "patientInternalId",
+      "skiprows": 1,
+      "headers": ["patientInternalId", "nameFirst", "nameLast", "birthDate"],
+      "tasks": [
+        {
+          "task": "add_constant",
+          "name": "source",
+          "value": "patient_extract"
+        }
+      ],
+      "comment": "Patient extract file"
+    },
+    "encounter": {
+      "fileType": "fixed-width",
+      "resourceType": "Encounter",
+      "groupByKey": "encounterNumber",
+      "headers": [
+        {"name": "col1", "width": 10},
+        {"name": "col2", "width": 20}
+      ],
+      "comment": "Fixed-width encounter file"
+    }
+  }
+}
