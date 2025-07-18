@@ -1,5 +1,6 @@
 mod config;
 mod contract;
+mod converter;
 mod default_tasks;
 mod error;
 mod integration_tests;
@@ -10,6 +11,10 @@ mod tasks;
 
 pub use config::Config;
 pub use contract::{Contract, FileDefinition, General};
+pub use converter::{
+    convert, convert_with, transform, ConversionOptions, ConvertedRow, RecordConverter,
+    TransformedRow,
+};
 pub use default_tasks::{
     build_default_task_chain, build_default_task_chain_with_start, execute_default_and_user_tasks,
 };
