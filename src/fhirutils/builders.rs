@@ -489,6 +489,31 @@ pub fn boolean_value(value: &str) -> Option<bool> {
     }
 }
 
+pub fn field<'a>(record: &'a Value, key: &str) -> Option<&'a str> {
+    record
+        .get(key)
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn field_list(record: &Value, key: &str) -> Vec<String> {
+    match record.get(key) {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_str())
+            .filter(|item| !item.is_empty())
+            .map(|item| item.to_string())
+            .collect(),
+        Some(Value::String(text)) if !text.is_empty() => text
+            .split(['|', ','])
+            .map(|item| item.trim())
+            .filter(|item| !item.is_empty())
+            .map(|item| item.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 pub fn non_empty(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.is_empty())
 }
@@ -741,6 +766,18 @@ mod tests {
         assert_eq!(boolean_value("T"), Some(true));
         assert_eq!(boolean_value("false"), Some(false));
         assert_eq!(boolean_value("maybe"), None);
+    }
+
+    #[test]
+    fn record_fields_are_read_as_strings_and_lists() {
+        let record = json!({"a": "1", "b": "", "c": null, "d": ["x", "", "y"], "e": "x|y, z"});
+        assert_eq!(field(&record, "a"), Some("1"));
+        assert_eq!(field(&record, "b"), None);
+        assert_eq!(field(&record, "c"), None);
+        assert_eq!(field(&record, "missing"), None);
+        assert_eq!(field_list(&record, "d"), vec!["x", "y"]);
+        assert_eq!(field_list(&record, "e"), vec!["x", "y", "z"]);
+        assert!(field_list(&record, "missing").is_empty());
     }
 
     #[test]
