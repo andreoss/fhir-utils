@@ -53,6 +53,21 @@ pub fn human_name(record: &Value) -> Option<Value> {
     builders::human_name_from_text(full, prefix, suffix)
 }
 
+pub fn project(record: &Value, fields: &[(&str, &str)]) -> Value {
+    let mut projected = Map::new();
+    for (source, target) in fields {
+        if projected.contains_key(*target) {
+            continue;
+        }
+        if let Some(value) = record.get(*source) {
+            if !value.is_null() {
+                projected.insert(target.to_string(), value.clone());
+            }
+        }
+    }
+    Value::Object(projected)
+}
+
 pub fn resource(resource_type: &str, id: &str, meta: &Value) -> Map<String, Value> {
     let mut resource = Map::new();
     resource.insert("resourceType".into(), Value::String(resource_type.into()));
@@ -145,6 +160,36 @@ mod tests {
         assert_eq!(last_only["text"], json!("Smith"));
 
         assert!(human_name(&json!({"gender": "female"})).is_none());
+    }
+
+    #[test]
+    fn project_renames_and_drops_unlisted_fields() {
+        let record = json!({"locationResourceInternalId": "l1", "locationName": "ER", "mrn": "m1"});
+        let projected = project(
+            &record,
+            &[
+                ("locationResourceInternalId", "resourceInternalId"),
+                ("locationName", "locationName"),
+                ("missing", "missing"),
+            ],
+        );
+        assert_eq!(projected["resourceInternalId"], json!("l1"));
+        assert_eq!(projected["locationName"], json!("ER"));
+        assert!(projected.get("mrn").is_none());
+        assert!(projected.get("missing").is_none());
+    }
+
+    #[test]
+    fn project_keeps_the_first_source_for_a_target() {
+        let record = json!({"practitionerRoleCode": "a", "practitionerRoleCodes": "b"});
+        let projected = project(
+            &record,
+            &[
+                ("practitionerRoleCode", "practitionerRoleCode"),
+                ("practitionerRoleCodes", "practitionerRoleCode"),
+            ],
+        );
+        assert_eq!(projected["practitionerRoleCode"], json!("a"));
     }
 
     #[test]

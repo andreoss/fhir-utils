@@ -37,6 +37,7 @@ pub const DISCHARGE_DISPOSITION_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/discharge-disposition";
 pub const ENCOUNTER_CLASS_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v3-ActCode";
 pub const ETHNICITY_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v3-Ethnicity";
+pub const PROVIDER_TAXONOMY_SYSTEM: &str = "http://nucc.org/provider-taxonomy";
 pub const LOCATION_TYPE_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/v3-RoleCode";
 pub const MED_ADM_CATEGORY_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/medication-admin-category";
