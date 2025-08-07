@@ -1,4 +1,5 @@
 pub mod allergy_intolerance;
+pub mod basic;
 pub mod common;
 pub mod condition;
 pub mod dispatch;
@@ -12,3 +13,4 @@ pub mod organization;
 pub mod patient;
 pub mod practitioner;
 pub mod procedure;
+pub mod unstructured;

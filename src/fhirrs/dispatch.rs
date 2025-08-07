@@ -31,10 +31,16 @@ pub const RESOURCE_KEYS: &[(&str, ConvertFn)] = &[
         "MedicationStatement",
         crate::fhirrs::medication::convert_statement,
     ),
-    ("DocumentReference", not_implemented),
-    ("DiagnosticReport", not_implemented),
-    ("Unstructured", not_implemented),
-    ("Basic", not_implemented),
+    (
+        "DocumentReference",
+        crate::fhirrs::unstructured::convert_document_reference,
+    ),
+    (
+        "DiagnosticReport",
+        crate::fhirrs::unstructured::convert_diagnostic_report,
+    ),
+    ("Unstructured", crate::fhirrs::unstructured::convert_record),
+    ("Basic", crate::fhirrs::basic::convert_record),
 ];
 
 const SOURCE_RECORD_ID_SUFFIX: &str = "SourceRecordId";
@@ -67,17 +73,6 @@ pub fn source_record_id(record: &Value) -> Option<&str> {
     keys.sort();
     keys.into_iter()
         .find_map(|key| builders::field(record, key))
-}
-
-fn not_implemented(
-    _group_by_key: &str,
-    record: &Value,
-    _meta: &Value,
-) -> Result<Vec<Value>, Error> {
-    let resource_type = builders::field(record, "configResourceType").unwrap_or("resource");
-    Err(Error::Conversion(format!(
-        "{resource_type} conversion not implemented"
-    )))
 }
 
 #[cfg(test)]
