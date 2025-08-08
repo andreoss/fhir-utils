@@ -9,6 +9,7 @@ mod integration_tests;
 mod lookup;
 mod reader;
 mod streaming;
+mod task_library;
 mod tasks;
 
 pub use config::Config;
