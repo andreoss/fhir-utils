@@ -7,6 +7,7 @@ pub mod fhirrs;
 pub mod fhirutils;
 mod integration_tests;
 mod lookup;
+pub mod opener;
 mod reader;
 mod streaming;
 mod task_library;

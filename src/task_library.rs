@@ -1,13 +1,13 @@
-use crate::config::config;
 use crate::contract::{FileType, Headers, SkipRows};
 use crate::error::Error;
-use crate::reader::{read_file, ReaderParams, RecordBatch};
+use crate::opener;
+use crate::reader::{read_delimited, read_fixed_width, ReaderParams, RecordBatch};
 use crate::tasks::TaskRegistry;
 use chrono::{NaiveDate, Utc};
 use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+
 use std::sync::Arc;
 
 pub const LIST_SEPARATOR: char = '|';
@@ -128,12 +128,12 @@ fn set_column(batch: &mut RecordBatch, name: &str, values: Vec<Option<String>>) 
     batch.columns.insert(name.to_string(), values);
 }
 
-fn resolve_path(source: &str) -> PathBuf {
-    let path = Path::new(source);
-    if path.is_absolute() {
-        return path.to_path_buf();
+fn read_source(source: &str, params: &ReaderParams) -> Result<RecordBatch, Error> {
+    let mut handle = opener::open(source)?;
+    match params.file_type {
+        FileType::Csv => read_delimited(&mut handle, params),
+        FileType::FixedWidth => read_fixed_width(&mut handle, params),
     }
-    Path::new(&config().mapping_config_directory).join(path)
 }
 
 fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
@@ -145,7 +145,7 @@ fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
         headers: None,
         empty_field_values: None,
     };
-    let batch = read_file(&resolve_path(source), &params)?;
+    let batch = read_source(source, &params)?;
     let mut names = batch.column_names();
     names.sort();
     let key_column = names.first().cloned().unwrap_or_default();
@@ -933,7 +933,7 @@ fn read_secondary(
         }
     }
 
-    read_file(&resolve_path(source), &params)
+    read_source(source, &params)
 }
 
 #[cfg(test)]
