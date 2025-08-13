@@ -25,3 +25,10 @@ serial_test = "3.0"
 
 [features]
 optimized-streaming = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+strip = true
+panic = "abort"
