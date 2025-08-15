@@ -1,0 +1,15 @@
+{
+  "fileType": "csv",
+  "resourceType": "Patient",
+  "groupByKey": "patientInternalId",
+  "tasks": [
+    { "task": "map_codes", "code_map": { "gender": "sex.csv" } },
+    { "task": "change_case", "columns": ["nameLast"], "casing": "UPPER" },
+    {
+      "task": "validate_value",
+      "column_name": "mrn",
+      "regex": "^[0-9]+$",
+      "no_match_replacement": "unknown"
+    }
+  ]
+}

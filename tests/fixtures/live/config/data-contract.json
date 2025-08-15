@@ -1,0 +1,48 @@
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "tenant1",
+    "streamType": "live",
+    "assigningAuthority": "authority",
+    "emptyFieldValues": ["", "NA", "N/A", "null"]
+  },
+  "fileDefinitions": {
+    "patient": "patient-definition.json",
+    "encounter": {
+      "fileType": "csv",
+      "valueDelimiter": "|",
+      "resourceType": "Encounter",
+      "groupByKey": "patientInternalId",
+      "comment": "headerless pipe delimited extract",
+      "headers": [
+        "patientInternalId",
+        "encounterInternalId",
+        "encounterNumber",
+        "encounterStatus",
+        "encounterClassCode",
+        "encounterStartDateTime",
+        "encounterEndDateTime"
+      ]
+    },
+    "observation": {
+      "fileType": "fixed-width",
+      "resourceType": "Observation",
+      "groupByKey": "patientInternalId",
+      "headers": [
+        { "name": "patientInternalId", "width": 6 },
+        { "name": "observationCode", "width": 8 },
+        { "name": "observationCodeSystem", "width": 6 },
+        { "name": "observationValue", "width": 6 },
+        { "name": "observationValueUnits", "width": 6 },
+        { "name": "observationDateTime", "width": 10 }
+      ]
+    },
+    "lastname": {
+      "fileType": "csv",
+      "resourceType": "Patient",
+      "groupByKey": "patientInternalId",
+      "comment": "last name only extract, first data row is a repeated header",
+      "skiprows": [1]
+    }
+  }
+}

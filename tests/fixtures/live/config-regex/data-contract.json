@@ -1,0 +1,15 @@
+{
+  "general": {
+    "timeZone": "UTC",
+    "tenantId": "tenant1",
+    "streamType": "historical",
+    "regexFilenames": true
+  },
+  "fileDefinitions": {
+    "^pat[a-z]+$": {
+      "fileType": "csv",
+      "resourceType": "Patient",
+      "groupByKey": "patientInternalId"
+    }
+  }
+}

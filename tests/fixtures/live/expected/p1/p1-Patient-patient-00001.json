@@ -1,0 +1,89 @@
+{
+  "birthDate": "1980-01-02",
+  "gender": "female",
+  "id": "p1",
+  "identifier": [
+    {
+      "id": "PI.p1",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "PI",
+            "display": "Patient internal identifier",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Patient internal identifier"
+      },
+      "value": "p1"
+    },
+    {
+      "id": "SS",
+      "type": {
+        "coding": [
+          {
+            "code": "SS",
+            "display": "Social Security number",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Social Security number"
+      },
+      "value": "123456789"
+    },
+    {
+      "id": "MR.12345",
+      "system": "urn:id:authority",
+      "type": {
+        "coding": [
+          {
+            "code": "MR",
+            "display": "Medical record number",
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+          }
+        ],
+        "text": "Medical record number"
+      },
+      "value": "12345"
+    }
+  ],
+  "meta": {
+    "extension": [
+      {
+        "url": "urn:id:tenant-id",
+        "valueString": "tenant1"
+      },
+      {
+        "url": "urn:id:source-file-id",
+        "valueString": "patient.csv:00001"
+      },
+      {
+        "url": "urn:id:source-event-trigger",
+        "valueCodeableConcept": {
+          "text": "Patient"
+        }
+      },
+      {
+        "url": "urn:id:process-timestamp",
+        "valueDateTime": "<timestamp>"
+      },
+      {
+        "url": "urn:id:source-record-type",
+        "valueCodeableConcept": {
+          "text": "csv"
+        }
+      }
+    ]
+  },
+  "name": [
+    {
+      "family": "SMITH",
+      "given": [
+        "Ann"
+      ],
+      "text": "Ann SMITH"
+    }
+  ],
+  "resourceType": "Patient"
+}
