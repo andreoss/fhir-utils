@@ -1304,6 +1304,118 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
+    fn map_codes_reads_a_mapping_file() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            ("sex.csv".into(), b"key,value\nM,male\nF,female\n".to_vec()),
+        ])));
+
+        let mut data = batch(&[("sex", &[Some("M"), Some("F"), Some("Z")])]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": "sex.csv"}}),
+        );
+        assert_eq!(
+            column(&data, "sex"),
+            vec![Some("male".into()), Some("female".into()), Some("Z".into())]
+        );
+
+        crate::opener::set_opener(previous);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn join_data_merges_a_secondary_source() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            (
+                "addresses.csv".into(),
+                b"mrn,city\nm1,Boston\nm3,Denver\n".to_vec(),
+            ),
+        ])));
+
+        let mut left = batch(&[("mrn", &[Some("m1"), Some("m2")])]);
+        run(
+            &mut left,
+            "join_data",
+            json!({
+                "secondary_data_source": "addresses.csv",
+                "join_type": "left",
+                "join_on": "mrn",
+                "source_type": "csv"
+            }),
+        );
+        assert_eq!(left.row_count, 2);
+        let mut cities = column(&left, "city");
+        cities.sort();
+        assert_eq!(cities, vec![None, Some("Boston".into())]);
+
+        let mut inner = batch(&[("mrn", &[Some("m1"), Some("m2")])]);
+        run(
+            &mut inner,
+            "join_data",
+            json!({
+                "secondary_data_source": "addresses.csv",
+                "join_type": "inner",
+                "join_on": "mrn",
+                "source_type": "csv"
+            }),
+        );
+        assert_eq!(inner.row_count, 1);
+        assert_eq!(column(&inner, "city"), vec![Some("Boston".into())]);
+
+        let mut outer = batch(&[("mrn", &[Some("m1"), Some("m2")])]);
+        run(
+            &mut outer,
+            "join_data",
+            json!({
+                "secondary_data_source": "addresses.csv",
+                "join_type": "outer",
+                "join_on": "mrn"
+            }),
+        );
+        assert_eq!(outer.row_count, 3);
+
+        crate::opener::set_opener(previous);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn join_data_reports_a_missing_join_column() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            ("addresses.csv".into(), b"other,city\nm1,Boston\n".to_vec()),
+        ])));
+
+        let registry = TaskRegistry::new();
+        let mut data = batch(&[("mrn", &[Some("m1")])]);
+        let params: HashMap<String, Value> = json!({
+            "secondary_data_source": "addresses.csv",
+            "join_type": "left",
+            "join_on": "mrn"
+        })
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+        let errors = execute_task_chain(
+            &mut data,
+            &[crate::contract::Task {
+                task: "join_data".into(),
+                params,
+            }],
+            &registry,
+        );
+        assert_eq!(errors.len(), 1);
+        assert_eq!(data.row_count, 1);
+
+        crate::opener::set_opener(previous);
+    }
+
+    #[test]
     fn validate_value_replaces_non_matching_values() {
         let mut data = batch(&[("mrn", &[Some("12345"), Some("bad")])]);
         run(
