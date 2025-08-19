@@ -37,7 +37,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Coverage floor
-        run: cargo llvm-cov --lib --tests --fail-under-lines "$COVERAGE_FLOOR"
+        run: cargo llvm-cov --fail-under-lines "$COVERAGE_FLOOR"
 
       - name: Build release binary
         run: cargo build --release
