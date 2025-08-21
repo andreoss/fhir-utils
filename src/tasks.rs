@@ -78,12 +78,26 @@ fn add_constant(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Res
         .ok_or_else(|| Error::MissingTaskParam("add_constant.name".into()))?;
     let value = params
         .get("value")
-        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::MissingTaskParam("add_constant.value".into()))?;
+    let value = constant_value(value)
         .ok_or_else(|| Error::MissingTaskParam("add_constant.value".into()))?;
 
     let column = batch.columns.entry(name.to_string()).or_default();
-    column.resize(batch.row_count, Some(value.to_string()));
+    column.resize(batch.row_count, Some(value));
     Ok(())
+}
+
+fn constant_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Bool(value) => Some(value.to_string()),
+        Value::Number(value) => Some(value.to_string()),
+        Value::Array(items) => {
+            let items: Vec<String> = items.iter().filter_map(constant_value).collect();
+            crate::task_library::join_list(&items)
+        }
+        _ => None,
+    }
 }
 
 fn add_row_num(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
@@ -101,22 +115,11 @@ fn add_row_num(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Resu
     Ok(())
 }
 
-fn set_nan_to_none(
-    _batch: &mut RecordBatch,
-    _params: &HashMap<String, Value>,
-) -> Result<(), Error> {
-    for column in _batch.columns.values_mut() {
+fn set_nan_to_none(batch: &mut RecordBatch, _params: &HashMap<String, Value>) -> Result<(), Error> {
+    for column in batch.columns.values_mut() {
         for value in column.iter_mut() {
-            if let Some(v) = value {
-                let trimmed = v.trim();
-                if trimmed.is_empty()
-                    || trimmed.eq_ignore_ascii_case("nan")
-                    || trimmed.eq_ignore_ascii_case("na")
-                    || trimmed.eq_ignore_ascii_case("n/a")
-                    || trimmed.eq_ignore_ascii_case("null")
-                {
-                    *value = None;
-                }
+            if value.as_ref().is_some_and(|value| value.trim().is_empty()) {
+                *value = None;
             }
         }
     }
@@ -168,17 +171,23 @@ fn copy_columns(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Res
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
 
+    let matched: Vec<&String> = source_columns
+        .iter()
+        .filter(|name| batch.columns.contains_key(*name))
+        .collect();
+
     let mut target = Vec::with_capacity(batch.row_count);
     for row_idx in 0..batch.row_count {
-        let mut parts = Vec::new();
-        for col_name in &source_columns {
-            if let Some(col) = batch.columns.get(col_name) {
-                if let Some(Some(val)) = col.get(row_idx) {
-                    parts.push(val.clone());
-                }
-            }
-        }
-        target.push(if parts.is_empty() {
+        let parts: Vec<String> = matched
+            .iter()
+            .map(
+                |name| match batch.columns.get(*name).and_then(|col| col.get(row_idx)) {
+                    Some(Some(value)) => value.clone(),
+                    _ => String::new(),
+                },
+            )
+            .collect();
+        target.push(if parts.iter().all(|part| part.is_empty()) {
             None
         } else {
             Some(parts.join(value_separator))
@@ -247,9 +256,9 @@ mod tests {
             "col1".into(),
             vec![
                 Some("value".into()),
-                Some("NAN".into()),
+                Some("".into()),
                 Some("  ".into()),
-                Some("null".into()),
+                Some("NA".into()),
             ],
         )]));
         let params = HashMap::new();
@@ -257,7 +266,7 @@ mod tests {
         set_nan_to_none(&mut batch, &params).unwrap();
         assert_eq!(
             batch.get_column("col1").unwrap(),
-            &vec![Some("value".into()), None, None, None]
+            &vec![Some("value".into()), None, None, Some("NA".into())]
         );
     }
 
@@ -281,6 +290,54 @@ mod tests {
                 Some("tab".into()),
                 Some("normal".into())
             ]
+        );
+    }
+
+    #[test]
+    fn test_add_constant_accepts_non_string_values() {
+        let mut batch = make_batch_with_columns(HashMap::new());
+        batch.row_count = 2;
+
+        add_constant(
+            &mut batch,
+            &HashMap::from([("name".into(), json!("count")), ("value".into(), json!(3))]),
+        )
+        .unwrap();
+        add_constant(
+            &mut batch,
+            &HashMap::from([
+                ("name".into(), json!("codes")),
+                ("value".into(), json!(["a", "b"])),
+            ]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            batch.get_column("count").unwrap(),
+            &vec![Some("3".into()); 2]
+        );
+        assert_eq!(
+            batch.get_column("codes").unwrap(),
+            &vec![Some("a|b".into()); 2]
+        );
+    }
+
+    #[test]
+    fn test_copy_columns_keeps_positions() {
+        let mut batch = make_batch_with_columns(HashMap::from([
+            ("a".into(), vec![Some("1".into()), None, None]),
+            ("b".into(), vec![Some("2".into()), Some("3".into()), None]),
+        ]));
+        let params = HashMap::from([
+            ("columns".into(), json!(["a", "b"])),
+            ("target_column".into(), json!("key")),
+            ("value_separator".into(), json!("|")),
+        ]);
+
+        copy_columns(&mut batch, &params).unwrap();
+        assert_eq!(
+            batch.get_column("key").unwrap(),
+            &vec![Some("1|2".into()), Some("|3".into()), None]
         );
     }
 
