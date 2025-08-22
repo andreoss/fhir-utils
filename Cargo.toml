@@ -3,6 +3,8 @@ name = "fhir-utils"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
+description = "Delimited and fixed-width records to FHIR JSON, driven by a data contract"
+rust-version = "1.80"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
