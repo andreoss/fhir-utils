@@ -384,6 +384,30 @@ mod tests {
     }
 
     #[test]
+    fn chunks_never_exceed_the_buffer_size() {
+        let mut data = String::from("a,b\n");
+        for row in 0..5000 {
+            data.push_str(&format!("{row},{row}\n"));
+        }
+        let p = params(&csv_def(), &general());
+        let mut reader = ChunkedReader::new(Cursor::new(data), p, 10).unwrap();
+
+        let mut chunks = 0;
+        let mut rows = 0;
+        let mut next_row_num = 1;
+        while let Some(chunk) = reader.next_chunk().unwrap() {
+            assert!(chunk.batch.row_count <= 10);
+            assert_eq!(chunk.starting_row_num, next_row_num);
+            next_row_num += chunk.batch.row_count;
+            rows += chunk.batch.row_count;
+            chunks += 1;
+        }
+
+        assert_eq!(rows, 5000);
+        assert_eq!(chunks, 500);
+    }
+
+    #[test]
     fn reads_a_file_in_chunks() {
         let mut file = NamedTempFile::new().unwrap();
         writeln!(file, "a,b").unwrap();
