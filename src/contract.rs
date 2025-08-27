@@ -82,7 +82,54 @@ pub enum SkipRows {
 pub enum Headers {
     List(Vec<String>),
     Dict(Vec<HeaderDict>),
-    WidthMap(HashMap<String, usize>),
+    WidthMap(WidthMap),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WidthMap(pub Vec<(String, usize)>);
+
+impl WidthMap {
+    pub fn entries(&self) -> &[(String, usize)] {
+        &self.0
+    }
+}
+
+impl Serialize for WidthMap {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (name, width) in &self.0 {
+            map.serialize_entry(name, width)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for WidthMap {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct WidthMapVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for WidthMapVisitor {
+            type Value = WidthMap;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map of column names to widths")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut access: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+                while let Some((name, width)) = access.next_entry::<String, usize>()? {
+                    entries.push((name, width));
+                }
+                Ok(WidthMap(entries))
+            }
+        }
+
+        deserializer.deserialize_map(WidthMapVisitor)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -128,30 +175,21 @@ const VALID_RESOURCE_TYPES: &[&str] = &[
     "Basic",
 ];
 
-fn resolve_external_definitions(contract: &mut serde_json::Value) -> Result<(), Error> {
-    let definitions = match contract
-        .get_mut("fileDefinitions")
-        .and_then(|value| value.as_object_mut())
-    {
-        Some(definitions) => definitions,
-        None => return Ok(()),
-    };
+#[derive(Deserialize)]
+struct RawContract<'a> {
+    general: General,
+    #[serde(rename = "fileDefinitions", borrow, default)]
+    file_definitions: HashMap<String, &'a serde_json::value::RawValue>,
+}
 
-    let external: Vec<(String, String)> = definitions
-        .iter()
-        .filter_map(|(matcher, value)| {
-            value
-                .as_str()
-                .map(|source| (matcher.clone(), source.to_string()))
-        })
-        .collect();
-
-    for (matcher, source) in external {
-        let content = crate::opener::read_to_string(&source)?;
-        let definition: serde_json::Value = serde_json::from_str(&content)?;
-        definitions.insert(matcher, definition);
+fn resolve_definition(raw: &serde_json::value::RawValue) -> Result<FileDefinition, Error> {
+    match serde_json::from_str::<String>(raw.get()) {
+        Ok(source) => {
+            let content = crate::opener::read_to_string(&source)?;
+            Ok(serde_json::from_str(&content)?)
+        }
+        Err(_) => Ok(serde_json::from_str(raw.get())?),
     }
-    Ok(())
 }
 
 const KNOWN_TASKS: &[&str] = &[
@@ -182,9 +220,16 @@ const KNOWN_TASKS: &[&str] = &[
 
 impl Contract {
     pub fn load(json: &str) -> Result<Self, Error> {
-        let mut raw: serde_json::Value = serde_json::from_str(json)?;
-        resolve_external_definitions(&mut raw)?;
-        let contract: Contract = serde_json::from_value(raw)?;
+        let raw: RawContract = serde_json::from_str(json)?;
+        let mut file_definitions = HashMap::new();
+        for (matcher, definition) in raw.file_definitions {
+            file_definitions.insert(matcher, resolve_definition(definition)?);
+        }
+
+        let contract = Contract {
+            general: raw.general,
+            file_definitions,
+        };
         contract.validate()?;
         Ok(contract)
     }
@@ -228,11 +273,13 @@ impl Contract {
             )));
         }
 
-        if matches!(def.file_type, FileType::FixedWidth) {
-            if let Some(Headers::Dict(_)) = &def.headers {
-            } else {
-                return Err(Error::FixedWidthRequiresDictHeaders);
-            }
+        if matches!(def.file_type, FileType::FixedWidth)
+            && !matches!(
+                &def.headers,
+                Some(Headers::Dict(_)) | Some(Headers::WidthMap(_))
+            )
+        {
+            return Err(Error::FixedWidthRequiresDictHeaders);
         }
 
         if let Some(tasks) = &def.tasks {

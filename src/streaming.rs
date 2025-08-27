@@ -140,7 +140,7 @@ impl<R: Read + Seek> ChunkedReader<R> {
                     for header in widths.iter() {
                         let value = if pos < trimmed.len() {
                             let end = (pos + header.width).min(trimmed.len());
-                            normalize(Some(trimmed[pos..end].trim_end()), params)
+                            normalize(Some(trimmed[pos..end].trim()), params)
                         } else {
                             None
                         };
