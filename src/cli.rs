@@ -4,7 +4,7 @@ use crate::converter::{convert, ConversionOptions};
 use crate::error::Error;
 use crate::fhirutils::constants;
 use crate::lookup::lookup_file_definition;
-use crate::opener::{self, LocalOpener};
+use crate::opener::{self, LocalOpener, Opener};
 use crate::tasks::TaskRegistry;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -13,12 +13,41 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Default)]
 pub struct ConvertRequest {
     pub base: Option<PathBuf>,
     pub file: Option<PathBuf>,
     pub config_dir: Option<PathBuf>,
     pub output: PathBuf,
+    pub opener: Option<Arc<dyn Opener>>,
+}
+
+impl ConvertRequest {
+    pub fn directory(base: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
+        Self {
+            base: Some(base.into()),
+            output: output.into(),
+            ..Self::default()
+        }
+    }
+
+    pub fn single_file(
+        file: impl Into<PathBuf>,
+        config_dir: impl Into<PathBuf>,
+        output: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            file: Some(file.into()),
+            config_dir: Some(config_dir.into()),
+            output: output.into(),
+            ..Self::default()
+        }
+    }
+
+    pub fn with_opener(mut self, opener: Arc<dyn Opener>) -> Self {
+        self.opener = Some(opener);
+        self
+    }
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -54,7 +83,11 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         )));
     }
 
-    opener::set_opener(Arc::new(LocalOpener::new(config_dir.clone())));
+    let source_opener = request
+        .opener
+        .clone()
+        .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.clone())));
+    opener::set_opener(source_opener);
     let contract = Contract::load(&fs::read_to_string(&contract_path)?)?;
     let registry = TaskRegistry::new();
     fs::create_dir_all(&request.output)?;
@@ -267,12 +300,8 @@ mod tests {
     fn directory_mode_writes_grouped_resources() {
         let base = base_directory();
         let output = TempDir::new().unwrap();
-        let request = ConvertRequest {
-            base: Some(base.path().to_path_buf()),
-            file: None,
-            config_dir: None,
-            output: output.path().to_path_buf(),
-        };
+        let request =
+            ConvertRequest::directory(base.path().to_path_buf(), output.path().to_path_buf());
 
         let summary = run_convert(&request).unwrap();
         assert_eq!(summary.files, 1);
@@ -307,19 +336,17 @@ mod tests {
         let base = base_directory();
         let output = TempDir::new().unwrap();
         let request = ConvertRequest {
-            base: None,
             file: Some(base.path().join("input/patient.csv")),
-            config_dir: None,
             output: output.path().to_path_buf(),
+            ..ConvertRequest::default()
         };
         assert!(run_convert(&request).is_err());
 
-        let request = ConvertRequest {
-            base: None,
-            file: Some(base.path().join("input/patient.csv")),
-            config_dir: Some(base.path().join("config")),
-            output: output.path().to_path_buf(),
-        };
+        let request = ConvertRequest::single_file(
+            base.path().join("input/patient.csv"),
+            base.path().join("config"),
+            output.path().to_path_buf(),
+        );
         let summary = run_convert(&request).unwrap();
         assert_eq!(summary.files, 1);
         assert_eq!(summary.resources, 2);
@@ -330,12 +357,11 @@ mod tests {
     fn unmatched_files_are_skipped() {
         let base = base_directory();
         let output = TempDir::new().unwrap();
-        let request = ConvertRequest {
-            base: None,
-            file: Some(base.path().join("input/unmatched.csv")),
-            config_dir: Some(base.path().join("config")),
-            output: output.path().to_path_buf(),
-        };
+        let request = ConvertRequest::single_file(
+            base.path().join("input/unmatched.csv"),
+            base.path().join("config"),
+            output.path().to_path_buf(),
+        );
         let summary = run_convert(&request).unwrap();
         assert_eq!(
             summary,
@@ -349,14 +375,39 @@ mod tests {
 
     #[test]
     #[serial]
+    fn a_supplied_opener_serves_contract_relative_sources() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            CONTRACT.replace(
+                r#""groupByKey": "patientInternalId""#,
+                r#""groupByKey": "patientInternalId",
+                "tasks": [{"task": "map_codes", "code_map": {"nameLast": "names.csv"}}]"#,
+            ),
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let request = ConvertRequest::directory(base.path(), output.path()).with_opener(Arc::new(
+            crate::opener::MemoryOpener::new(vec![(
+                "names.csv".into(),
+                b"source_value,target_value\nSmith,Renamed\n".to_vec(),
+            )]),
+        ));
+
+        run_convert(&request).unwrap();
+        let content =
+            fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
+        let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    #[serial]
     fn missing_directories_raise() {
         let output = TempDir::new().unwrap();
-        let request = ConvertRequest {
-            base: Some(output.path().join("nope")),
-            file: None,
-            config_dir: None,
-            output: output.path().to_path_buf(),
-        };
+        let request =
+            ConvertRequest::directory(output.path().join("nope"), output.path().to_path_buf());
         assert!(run_convert(&request).is_err());
     }
 
@@ -370,12 +421,8 @@ mod tests {
         )
         .unwrap();
         let output = TempDir::new().unwrap();
-        let request = ConvertRequest {
-            base: Some(base.path().to_path_buf()),
-            file: None,
-            config_dir: None,
-            output: output.path().to_path_buf(),
-        };
+        let request =
+            ConvertRequest::directory(base.path().to_path_buf(), output.path().to_path_buf());
 
         run_convert(&request).unwrap();
         assert!(output

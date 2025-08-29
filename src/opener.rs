@@ -1,9 +1,10 @@
 use crate::error::Error;
-use once_cell::sync::OnceCell;
+
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub trait Source: Read + Seek + Send {}
 impl<T: Read + Seek + Send> Source for T {}
@@ -91,28 +92,24 @@ fn strip_file_scheme(source: &str) -> &str {
     source.strip_prefix("file://").unwrap_or(source)
 }
 
-type Shared = Arc<RwLock<Arc<dyn Opener>>>;
-
-fn slot() -> &'static Shared {
-    static SLOT: OnceCell<Shared> = OnceCell::new();
-    SLOT.get_or_init(|| {
-        Arc::new(RwLock::new(Arc::new(LocalOpener::new(
-            crate::config::config().mapping_config_directory.clone(),
-        ))))
-    })
+thread_local! {
+    static OPENER: RefCell<Option<Arc<dyn Opener>>> = const { RefCell::new(None) };
 }
 
 pub fn set_opener(opener: Arc<dyn Opener>) {
-    if let Ok(mut current) = slot().write() {
-        *current = opener;
-    }
+    OPENER.with(|slot| *slot.borrow_mut() = Some(opener));
 }
 
 pub fn opener() -> Arc<dyn Opener> {
-    slot()
-        .read()
-        .map(|current| current.clone())
-        .unwrap_or_else(|_| Arc::new(LocalOpener::new(".")))
+    OPENER.with(|slot| {
+        slot.borrow_mut()
+            .get_or_insert_with(|| {
+                Arc::new(LocalOpener::new(
+                    crate::config::config().mapping_config_directory.clone(),
+                )) as Arc<dyn Opener>
+            })
+            .clone()
+    })
 }
 
 pub fn open(source: &str) -> Result<Box<dyn Source>, Error> {
@@ -175,6 +172,29 @@ mod tests {
             Err(error) => error.to_string(),
         };
         assert!(error.contains("s3"));
+    }
+
+    #[test]
+    fn openers_do_not_leak_between_threads() {
+        set_opener(Arc::new(MemoryOpener::new(vec![(
+            "here.csv".into(),
+            b"main".to_vec(),
+        )])));
+
+        let worker = std::thread::spawn(|| {
+            let leaked = read_to_string("here.csv").is_ok();
+            set_opener(Arc::new(MemoryOpener::new(vec![(
+                "there.csv".into(),
+                b"worker".to_vec(),
+            )])));
+            (leaked, read_to_string("there.csv").unwrap())
+        });
+
+        let (leaked, worker_content) = worker.join().unwrap();
+        assert!(!leaked, "opener leaked into another thread");
+        assert_eq!(worker_content, "worker");
+        assert_eq!(read_to_string("here.csv").unwrap(), "main");
+        assert!(read_to_string("there.csv").is_err(), "worker opener leaked");
     }
 
     #[test]
