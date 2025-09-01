@@ -33,6 +33,9 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Test under release optimization
+        run: cargo test --release
+
       - name: Install coverage tool
         uses: taiki-e/install-action@cargo-llvm-cov
 
