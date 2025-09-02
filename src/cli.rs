@@ -22,6 +22,19 @@ pub struct ConvertRequest {
     pub opener: Option<Arc<dyn Opener>>,
 }
 
+impl std::fmt::Debug for ConvertRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ConvertRequest")
+            .field("base", &self.base)
+            .field("file", &self.file)
+            .field("config_dir", &self.config_dir)
+            .field("output", &self.output)
+            .field("opener", &self.opener.is_some())
+            .finish()
+    }
+}
+
 impl ConvertRequest {
     pub fn directory(base: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
         Self {
