@@ -43,6 +43,81 @@
       "groupByKey": "patientInternalId",
       "comment": "last name only extract, first data row is a repeated header",
       "skiprows": [1]
+    },
+    "allergy": {
+      "fileType": "csv",
+      "resourceType": "AllergyIntolerance",
+      "groupByKey": "patientInternalId"
+    },
+    "condition": {
+      "fileType": "csv",
+      "resourceType": "Condition",
+      "groupByKey": "patientInternalId"
+    },
+    "immunization": {
+      "fileType": "csv",
+      "resourceType": "Immunization",
+      "groupByKey": "patientInternalId"
+    },
+    "procedure": {
+      "fileType": "csv",
+      "resourceType": "Procedure",
+      "groupByKey": "patientInternalId"
+    },
+    "medication_use": {
+      "fileType": "csv",
+      "resourceType": "MedicationUse",
+      "groupByKey": "patientInternalId"
+    },
+    "medication_admin": {
+      "fileType": "csv",
+      "resourceType": "MedicationAdministration",
+      "groupByKey": "patientInternalId"
+    },
+    "medication_request": {
+      "fileType": "csv",
+      "resourceType": "MedicationRequest",
+      "groupByKey": "patientInternalId"
+    },
+    "medication_statement": {
+      "fileType": "csv",
+      "resourceType": "MedicationStatement",
+      "groupByKey": "patientInternalId"
+    },
+    "document": {
+      "fileType": "csv",
+      "resourceType": "DocumentReference",
+      "groupByKey": "patientInternalId"
+    },
+    "report": {
+      "fileType": "csv",
+      "resourceType": "DiagnosticReport",
+      "groupByKey": "patientInternalId"
+    },
+    "unstructured": {
+      "fileType": "csv",
+      "resourceType": "Unstructured",
+      "groupByKey": "patientInternalId"
+    },
+    "basic": {
+      "fileType": "csv",
+      "resourceType": "Basic",
+      "groupByKey": "patientInternalIdentifier"
+    },
+    "practitioner": {
+      "fileType": "csv",
+      "resourceType": "Practitioner",
+      "groupByKey": "practitionerInternalId"
+    },
+    "location": {
+      "fileType": "csv",
+      "resourceType": "Location",
+      "groupByKey": "locationResourceInternalId"
+    },
+    "organization": {
+      "fileType": "csv",
+      "resourceType": "Organization",
+      "groupByKey": "organizationResourceInternalId"
     }
   }
 }

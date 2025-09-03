@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,procedureCode,procedureCodeSystem,procedureStatus,procedurePerformedDateTime,procedureModifierList,procedureModifierSystem
+p1,pr1,0DTJ0ZZ,ICD10PCS,completed,2021-06-01 09:00:00,5926,CPT

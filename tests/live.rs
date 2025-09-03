@@ -79,7 +79,7 @@ fn collect(root: &Path) -> BTreeMap<String, Value> {
 fn live_extract_matches_the_golden_files() {
     let output = tempfile::TempDir::new().unwrap();
     let summary = convert_fixture_tree(output.path());
-    assert_eq!(summary.files, 4);
+    assert_eq!(summary.files, 19);
     assert_eq!(summary.skipped, 1);
 
     let produced = collect(output.path());
@@ -149,13 +149,15 @@ fn live_extract_covers_every_input_shape() {
 
     let encounter = produced
         .values()
-        .find(|value| value["resourceType"] == "Encounter")
+        .find(|value| value["resourceType"] == "Encounter" && value["id"] == "e1")
         .unwrap();
     assert_eq!(encounter["period"]["start"], "2021-06-01T08:00:00-04:00");
 
     let observation = produced
         .values()
-        .find(|value| value["resourceType"] == "Observation")
+        .find(|value| {
+            value["resourceType"] == "Observation" && value["code"]["coding"][0]["code"] == "1234-5"
+        })
         .unwrap();
     assert_eq!(observation["valueQuantity"]["unit"], "mg/dL");
     assert_eq!(
@@ -168,6 +170,40 @@ fn live_extract_covers_every_input_shape() {
         .find(|value| value["resourceType"] == "Patient" && value["id"] == "p3")
         .unwrap();
     assert_eq!(last_name_only["name"][0]["family"], "Solo");
+}
+
+#[test]
+fn every_resource_key_produces_golden_output() {
+    let expected_root = fixtures().join("expected");
+    let produced: Vec<String> = collect(&expected_root)
+        .values()
+        .filter_map(|value| value["resourceType"].as_str().map(String::from))
+        .collect();
+
+    for resource_type in [
+        "AllergyIntolerance",
+        "Basic",
+        "Condition",
+        "DiagnosticReport",
+        "DocumentReference",
+        "Encounter",
+        "Immunization",
+        "Location",
+        "MedicationAdministration",
+        "MedicationRequest",
+        "MedicationStatement",
+        "Observation",
+        "Organization",
+        "Patient",
+        "Practitioner",
+        "PractitionerRole",
+        "Procedure",
+    ] {
+        assert!(
+            produced.iter().any(|value| value == resource_type),
+            "no golden file for {resource_type}"
+        );
+    }
 }
 
 #[test]

@@ -1,0 +1,2 @@
+patientInternalId,resourceInternalId,resourceType,medicationCode,medicationCodeSystem,medicationUseDosageText,medicationUseOccuranceDateTime
+p1,m1,MedicationStatement,1049502,RXNORM,1 tablet daily,2021-06-01 08:00:00
