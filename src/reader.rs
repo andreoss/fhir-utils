@@ -11,7 +11,6 @@ use std::path::Path;
 pub struct ReaderParams {
     pub file_type: FileType,
     pub value_delimiter: char,
-    pub convert_columns_to_string: bool,
     pub skiprows: Option<SkipRows>,
     pub headers: Option<Headers>,
     pub empty_field_values: Option<Vec<String>>,
@@ -25,7 +24,7 @@ impl ReaderParams {
         Self {
             file_type: def.file_type.clone(),
             value_delimiter: def.value_delimiter,
-            convert_columns_to_string: def.convert_columns_to_string,
+
             skiprows: def.skiprows.clone(),
             headers: def.headers.clone(),
             empty_field_values: general_empty_field_values.cloned(),
@@ -297,8 +296,8 @@ mod tests {
     }
 
     #[test]
-    fn test_read_delimited_convert_columns_to_string_false() {
-        let data = "1,2,3\n4,5,6\n";
+    fn test_values_are_read_as_strings_whatever_the_contract_asks() {
+        let data = "1,2.5,true\n4,5,6\n";
         let mut cursor = Cursor::new(data);
         let general = make_general();
         let mut def = make_csv_def();
@@ -311,6 +310,14 @@ mod tests {
         let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
 
         let batch = read_delimited(&mut cursor, &params).unwrap();
+        assert_eq!(
+            batch.get_column("col2").unwrap(),
+            &vec![Some("2.5".into()), Some("5".into())]
+        );
+        assert_eq!(
+            batch.get_column("col3").unwrap(),
+            &vec![Some("true".into()), Some("6".into())]
+        );
         assert_eq!(
             batch.get_column("col1").unwrap(),
             &vec![Some("1".into()), Some("4".into())]
