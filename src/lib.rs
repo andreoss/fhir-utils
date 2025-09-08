@@ -25,6 +25,6 @@ pub use default_tasks::{
 };
 pub use error::Error;
 pub use lookup::lookup_file_definition;
-pub use reader::{read_file, ReaderParams, RecordBatch};
-pub use streaming::{read_file_chunked, Chunk, ChunkedReader};
+pub use reader::{read_delimited, read_fixed_width, ReaderParams, RecordBatch};
+pub use streaming::{Chunk, ChunkedReader};
 pub use tasks::{execute_task_chain, TaskRegistry};
