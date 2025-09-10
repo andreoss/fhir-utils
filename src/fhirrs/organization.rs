@@ -36,11 +36,8 @@ pub fn build(record: &Value, meta: &Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::organization::convert_record;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use crate::fhirrs::testing::meta;
+    use serde_json::json;
 
     #[test]
     fn no_name_produces_no_resource() {

@@ -179,12 +179,9 @@ pub fn build(group_by_key: &str, record: &Value, meta: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::patient::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_demographic_data_produces_no_resource() {

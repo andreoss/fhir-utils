@@ -399,12 +399,9 @@ fn insured_extension(record: &Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::encounter::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
     use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
 
     fn encounter_of(resources: &[Value]) -> &Value {
         resources

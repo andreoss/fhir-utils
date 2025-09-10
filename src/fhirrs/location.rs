@@ -57,12 +57,9 @@ pub fn build(record: &Value, meta: &Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::location::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_location_data_produces_no_resource() {

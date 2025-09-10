@@ -137,12 +137,9 @@ pub fn convert_record(
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::immunization::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_vaccine_code_produces_no_resource() {

@@ -218,12 +218,9 @@ fn with_id(concept: Option<Value>, id: Option<String>) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::practitioner::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
-    use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
+    use serde_json::json;
 
     #[test]
     fn no_practitioner_data_produces_no_resource() {

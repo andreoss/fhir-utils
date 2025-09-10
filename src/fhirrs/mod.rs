@@ -14,3 +14,12 @@ pub mod patient;
 pub mod practitioner;
 pub mod procedure;
 pub mod unstructured;
+
+#[cfg(test)]
+pub mod testing {
+    use serde_json::{json, Value};
+
+    pub fn meta() -> Value {
+        json!({"extension": []})
+    }
+}

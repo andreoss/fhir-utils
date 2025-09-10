@@ -189,12 +189,9 @@ fn sequence_extension(record: &Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use crate::fhirrs::procedure::convert_record;
+    use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
     use serde_json::{json, Value};
-
-    fn meta() -> Value {
-        json!({"extension": []})
-    }
 
     fn find<'a>(resources: &'a [Value], resource_type: &str) -> &'a Value {
         resources
