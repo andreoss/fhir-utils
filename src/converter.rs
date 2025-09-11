@@ -3,7 +3,7 @@ use crate::default_tasks::build_default_task_chain_with_start;
 use crate::error::Error;
 use crate::fhirrs::{dispatch, meta};
 use crate::fhirutils::builders;
-use crate::reader::ReaderParams;
+use crate::reader::{ReaderParams, RecordBatch};
 use crate::streaming::ChunkedReader;
 use crate::tasks::{execute_task_chain, TaskRegistry};
 use serde_json::{Map, Value};
@@ -45,6 +45,7 @@ pub struct Transform<'a, R: Read + Seek> {
     options: ConversionOptions<'a>,
     pending: VecDeque<TransformedRow>,
     done: bool,
+    group_key_checked: bool,
 }
 
 impl<'a, R: Read + Seek> Transform<'a, R> {
@@ -59,7 +60,24 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
             options,
             pending: VecDeque::new(),
             done: false,
+            group_key_checked: false,
         })
+    }
+
+    fn warn_on_missing_group_key(&mut self, batch: &RecordBatch) {
+        if self.group_key_checked {
+            return;
+        }
+        self.group_key_checked = true;
+
+        if let Some(column) = missing_group_key(batch, self.options.file_def) {
+            warn!(
+                file = self.options.file_path,
+                column,
+                bucket = NO_GROUP_BY_KEY,
+                "group key column not found in the source; rows share one bucket and one resource id"
+            );
+        }
     }
 
     fn fill(&mut self) -> Result<bool, Error> {
@@ -82,6 +100,7 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
         for error in execute_task_chain(&mut batch, &tasks, self.options.registry) {
             warn!(error = %error, "task failed");
         }
+        self.warn_on_missing_group_key(&batch);
 
         for index in 0..batch.row_count {
             let mut record = Map::new();
@@ -179,6 +198,20 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
                 },
             },
         )
+    }
+}
+
+pub fn missing_group_key<'a>(batch: &RecordBatch, file_def: &'a FileDefinition) -> Option<&'a str> {
+    let column = file_def.group_by_key.as_deref()?;
+    let grouped = batch.columns.get("groupByKey").is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| builders::non_empty(value.as_deref()).is_some())
+    });
+    if grouped {
+        None
+    } else {
+        Some(column)
     }
 }
 
@@ -404,6 +437,40 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].group_by_key, "1");
+    }
+
+    #[test]
+    fn a_group_key_naming_a_missing_column_is_reported() {
+        let mut def = file_def();
+        def.group_by_key = Some("mrn".into());
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n"),
+            options(&contract, &def, &registry, 10),
+        )
+        .unwrap()
+        .collect();
+        assert_eq!(rows[0].group_by_key, "NoGroupByKey");
+
+        let mut batch = crate::reader::RecordBatch::new();
+        batch.row_count = 1;
+        assert_eq!(
+            crate::converter::missing_group_key(&batch, &def),
+            Some("mrn")
+        );
+
+        batch
+            .columns
+            .insert("groupByKey".into(), vec![Some("1".into())]);
+        assert_eq!(crate::converter::missing_group_key(&batch, &def), None);
+
+        batch.columns.insert("groupByKey".into(), vec![None]);
+        assert_eq!(
+            crate::converter::missing_group_key(&batch, &def),
+            Some("mrn")
+        );
     }
 
     #[test]

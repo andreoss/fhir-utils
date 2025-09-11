@@ -152,7 +152,10 @@ fn resolve_inputs(request: &ConvertRequest) -> Result<(Vec<PathBuf>, PathBuf), E
         let config_dir = base.join("config");
         for path in [&input_dir, &config_dir] {
             if !path.is_dir() {
-                return Err(Error::Config(format!("missing path: {}", path.display())));
+                return Err(Error::Config(format!(
+                    "directory not found: {}",
+                    path.display()
+                )));
             }
         }
         let mut inputs: Vec<PathBuf> = fs::read_dir(&input_dir)?
@@ -173,11 +176,14 @@ fn resolve_inputs(request: &ConvertRequest) -> Result<(Vec<PathBuf>, PathBuf), E
         .as_ref()
         .ok_or_else(|| Error::Config("-f requires -c".into()))?;
     if !file.is_file() {
-        return Err(Error::Config(format!("missing path: {}", file.display())));
+        return Err(Error::Config(format!(
+            "input file not found: {}",
+            file.display()
+        )));
     }
     if !config_dir.is_dir() {
         return Err(Error::Config(format!(
-            "missing path: {}",
+            "directory not found: {}",
             config_dir.display()
         )));
     }
