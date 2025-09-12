@@ -24,6 +24,7 @@ pub struct ConversionOptions<'a> {
     pub file_path: &'a str,
     pub registry: &'a TaskRegistry,
     pub buffer_size: usize,
+    pub strict: bool,
 }
 
 #[derive(Debug)]
@@ -64,20 +65,29 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
         })
     }
 
-    fn warn_on_missing_group_key(&mut self, batch: &RecordBatch) {
+    fn check_group_key(&mut self, batch: &RecordBatch) -> Result<(), Error> {
         if self.group_key_checked {
-            return;
+            return Ok(());
         }
         self.group_key_checked = true;
 
-        if let Some(column) = missing_group_key(batch, self.options.file_def) {
-            warn!(
-                file = self.options.file_path,
-                column,
-                bucket = NO_GROUP_BY_KEY,
-                "group key column not found in the source; rows share one bucket and one resource id"
-            );
+        let column = match missing_group_key(batch, self.options.file_def) {
+            Some(column) => column,
+            None => return Ok(()),
+        };
+        if self.options.strict {
+            return Err(Error::Conversion(format!(
+                "group key column {column} produced no value in {}",
+                self.options.file_path
+            )));
         }
+        warn!(
+            file = self.options.file_path,
+            column,
+            bucket = NO_GROUP_BY_KEY,
+            "group key column not found in the source; rows share one bucket and one resource id"
+        );
+        Ok(())
     }
 
     fn fill(&mut self) -> Result<bool, Error> {
@@ -97,10 +107,19 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
         if let Some(user_tasks) = &self.options.file_def.tasks {
             tasks.extend(user_tasks.clone());
         }
-        for error in execute_task_chain(&mut batch, &tasks, self.options.registry) {
+        let task_errors = execute_task_chain(&mut batch, &tasks, self.options.registry);
+        for error in &task_errors {
             warn!(error = %error, "task failed");
         }
-        self.warn_on_missing_group_key(&batch);
+        if self.options.strict {
+            if let Some(error) = task_errors.first() {
+                return Err(Error::Conversion(format!(
+                    "task failed in {}: {error}",
+                    self.options.file_path
+                )));
+            }
+        }
+        self.check_group_key(&batch)?;
 
         for index in 0..batch.row_count {
             let mut record = Map::new();
@@ -305,7 +324,77 @@ mod tests {
             file_path: "in.csv",
             registry,
             buffer_size,
+            strict: false,
         }
+    }
+
+    fn strict_options<'a>(
+        contract: &'a Contract,
+        def: &'a FileDefinition,
+        registry: &'a TaskRegistry,
+    ) -> ConversionOptions<'a> {
+        ConversionOptions {
+            strict: true,
+            ..options(contract, def, registry, 10)
+        }
+    }
+
+    #[test]
+    fn strict_mode_stops_on_a_failing_task() {
+        let mut def = file_def();
+        def.tasks = Some(vec![Task {
+            task: "add_constant".into(),
+            params: HashMap::new(),
+        }]);
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n3,4\n"),
+            strict_options(&contract, &def, &registry),
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows.len(), 1);
+        let message = rows[0].exception.as_ref().unwrap().to_string();
+        assert!(message.contains("in.csv"), "{message}");
+    }
+
+    #[test]
+    fn strict_mode_stops_when_the_group_key_is_empty() {
+        let mut def = file_def();
+        def.group_by_key = Some("mrn".into());
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n"),
+            strict_options(&contract, &def, &registry),
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows.len(), 1);
+        let message = rows[0].exception.as_ref().unwrap().to_string();
+        assert!(message.contains("mrn"), "{message}");
+    }
+
+    #[test]
+    fn strict_mode_passes_a_healthy_file() {
+        let def = file_def();
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+
+        let rows: Vec<_> = Transform::from_reader(
+            Cursor::new("a,b\n1,2\n3,4\n"),
+            strict_options(&contract, &def, &registry),
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| row.exception.is_none()));
     }
 
     #[test]

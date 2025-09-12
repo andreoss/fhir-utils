@@ -20,6 +20,7 @@ pub struct ConvertRequest {
     pub config_dir: Option<PathBuf>,
     pub output: PathBuf,
     pub opener: Option<Arc<dyn Opener>>,
+    pub strict: bool,
 }
 
 impl std::fmt::Debug for ConvertRequest {
@@ -31,6 +32,7 @@ impl std::fmt::Debug for ConvertRequest {
             .field("config_dir", &self.config_dir)
             .field("output", &self.output)
             .field("opener", &self.opener.is_some())
+            .field("strict", &self.strict)
             .finish()
     }
 }
@@ -59,6 +61,11 @@ impl ConvertRequest {
 
     pub fn with_opener(mut self, opener: Arc<dyn Opener>) -> Self {
         self.opener = Some(opener);
+        self
+    }
+
+    pub fn strict(mut self) -> Self {
+        self.strict = true;
         self
     }
 }
@@ -126,6 +133,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
             file_path: &file_path,
             registry: &registry,
             buffer_size: config().csv_buffer_size,
+            strict: request.strict,
         };
 
         summary.files += 1;
@@ -419,6 +427,28 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    #[serial]
+    fn strict_mode_fails_a_run_that_cannot_group() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            CONTRACT.replace(
+                r#""groupByKey": "patientInternalId""#,
+                r#""groupByKey": "mrn""#,
+            ),
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let lenient = ConvertRequest::directory(base.path(), output.path());
+        assert_eq!(run_convert(&lenient).unwrap().resources, 2);
+
+        let strict = ConvertRequest::directory(base.path(), output.path()).strict();
+        let error = run_convert(&strict).unwrap_err().to_string();
+        assert!(error.contains("mrn"), "{error}");
     }
 
     #[test]

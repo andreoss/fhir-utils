@@ -104,6 +104,39 @@ fn convert_runs_in_file_mode() {
 }
 
 #[test]
+fn convert_strict_mode_reports_an_ungroupable_file() {
+    let base = fixture_tree();
+    let contract = base.path().join("config/data-contract.json");
+    let text = std::fs::read_to_string(&contract)
+        .unwrap()
+        .replace("\"patientInternalId\"}", "\"mrn\"}");
+    std::fs::write(&contract, text).unwrap();
+
+    let lenient = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(base.path().join("out"))
+        .output()
+        .unwrap();
+    assert!(lenient.status.success());
+    assert!(String::from_utf8_lossy(&lenient.stderr).contains("group key"));
+
+    let strict = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(base.path().join("out-strict"))
+        .arg("--strict")
+        .output()
+        .unwrap();
+    assert!(!strict.status.success());
+    assert!(String::from_utf8_lossy(&strict.stderr).contains("mrn"));
+}
+
+#[test]
 fn convert_requires_an_input_selector() {
     let base = fixture_tree();
     let result = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))

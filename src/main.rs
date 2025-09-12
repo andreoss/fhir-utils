@@ -43,11 +43,14 @@ enum Commands {
         config_dir: Option<PathBuf>,
         #[arg(short, long, help = "Output directory for FHIR resources")]
         output: PathBuf,
+        #[arg(long, help = "Fail the run on a task error or an empty group key")]
+        strict: bool,
     },
 }
 
 fn main() {
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
@@ -62,7 +65,8 @@ fn main() {
             file,
             config_dir,
             output,
-        } => run_conversion(directory, file, config_dir, output),
+            strict,
+        } => run_conversion(directory, file, config_dir, output, strict),
     };
 
     if let Err(error) = result {
@@ -83,6 +87,7 @@ fn run_conversion(
     file: Option<PathBuf>,
     config_dir: Option<PathBuf>,
     output: PathBuf,
+    strict: bool,
 ) -> Result<(), Error> {
     if directory.is_none() && file.is_none() {
         return Err(Error::Config("convert needs -d or -f".into()));
@@ -94,6 +99,7 @@ fn run_conversion(
         config_dir,
         output,
         opener: None,
+        strict,
     })?;
     println!(
         "Converted {} file(s), wrote {} resource(s), skipped {} file(s)",
