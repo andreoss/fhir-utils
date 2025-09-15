@@ -75,6 +75,19 @@ fn main() {
     }
 }
 
+fn skipped_detail(names: &[String]) -> String {
+    if names.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<&str> = names.iter().take(3).map(String::as_str).collect();
+    let rest = names.len().saturating_sub(shown.len());
+    if rest > 0 {
+        format!(": {} and {rest} more", shown.join(", "))
+    } else {
+        format!(": {}", shown.join(", "))
+    }
+}
+
 fn run_validate(file: &str) -> Result<(), Error> {
     let content = fs::read_to_string(file)?;
     Contract::load(&content)?;
@@ -102,8 +115,11 @@ fn run_conversion(
         strict,
     })?;
     println!(
-        "Converted {} file(s), wrote {} resource(s), skipped {} file(s)",
-        summary.files, summary.resources, summary.skipped
+        "Converted {} file(s), wrote {} resource(s), skipped {} file(s){}",
+        summary.files,
+        summary.resources,
+        summary.skipped(),
+        skipped_detail(&summary.skipped_files)
     );
     Ok(())
 }
