@@ -151,10 +151,13 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         summary.files += 1;
         for row in convert(&input, options)? {
             if let Some(error) = row.exception {
-                return Err(Error::Conversion(format!(
-                    "row conversion failed for group key {} in {}: {error}",
-                    row.group_by_key, file_path
-                )));
+                return Err(match error {
+                    Error::Conversion(_) => error,
+                    other => Error::Conversion(format!(
+                        "row {} in {file_path} failed: {other}",
+                        row.group_by_key
+                    )),
+                });
             }
             for resource in row.resources {
                 write_resource(&request.output, &row.group_by_key, &resource, &mut counters)?;
