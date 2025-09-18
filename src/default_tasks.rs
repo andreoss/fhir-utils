@@ -1,5 +1,4 @@
 use crate::contract::{Contract, FileDefinition, General};
-use crate::error::Error;
 use crate::reader::RecordBatch;
 use crate::tasks::{execute_task_chain, TaskRegistry};
 use serde_json::json;
@@ -126,7 +125,7 @@ pub fn execute_default_and_user_tasks(
     file_def: &FileDefinition,
     file_path: &str,
     registry: &TaskRegistry,
-) -> Vec<Error> {
+) -> Vec<crate::tasks::TaskFailure> {
     let default_tasks = build_default_task_chain(
         &contract.general,
         file_def,
@@ -401,7 +400,10 @@ mod tests {
             &registry,
         );
         assert_eq!(errors.len(), 1);
-        assert!(matches!(errors[0], Error::UnknownTask(_)));
+        assert!(matches!(
+            errors[0].error,
+            crate::error::Error::UnknownTask(_)
+        ));
 
         assert_eq!(
             batch.get_column("good").unwrap(),

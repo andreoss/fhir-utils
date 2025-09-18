@@ -167,11 +167,23 @@ fn convert_names_skipped_files_and_warns_about_stale_output() {
         .output()
         .unwrap();
     assert!(second.status.success());
-    let warnings = String::from_utf8_lossy(&second.stderr);
     assert!(
-        warnings.contains("output directory is not empty"),
-        "{warnings}"
+        !String::from_utf8_lossy(&second.stderr).contains("not empty"),
+        "a repeated run into the same directory must stay quiet"
     );
+
+    let verbose = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(&output)
+        .env("RUST_LOG", "info")
+        .output()
+        .unwrap();
+    let logs = String::from_utf8_lossy(&verbose.stderr);
+    assert!(logs.contains("output directory is not empty"), "{logs}");
+    assert!(logs.contains("no file definition matched"), "{logs}");
 }
 
 #[test]
