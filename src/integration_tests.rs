@@ -60,6 +60,13 @@ mod tests {
     }
 
     #[test]
+    fn test_load_contract_written_with_a_byte_order_mark() {
+        let json = format!("\u{feff}{}", read_fixture("valid.json"));
+        let contract = Contract::load(&json).unwrap();
+        assert_eq!(contract.file_definitions.len(), 2);
+    }
+
+    #[test]
     fn test_reject_invalid_timezone() {
         let json = read_fixture("invalid_timezone.json");
         let err = Contract::load(&json).unwrap_err();

@@ -186,10 +186,14 @@ fn resolve_definition(raw: &serde_json::value::RawValue) -> Result<FileDefinitio
     match serde_json::from_str::<String>(raw.get()) {
         Ok(source) => {
             let content = crate::opener::read_to_string(&source)?;
-            Ok(serde_json::from_str(&content)?)
+            Ok(serde_json::from_str(without_bom(&content))?)
         }
         Err(_) => Ok(serde_json::from_str(raw.get())?),
     }
+}
+
+pub fn without_bom(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
 const KNOWN_TASKS: &[&str] = &[
@@ -220,7 +224,7 @@ const KNOWN_TASKS: &[&str] = &[
 
 impl Contract {
     pub fn load(json: &str) -> Result<Self, Error> {
-        let raw: RawContract = serde_json::from_str(json)?;
+        let raw: RawContract = serde_json::from_str(without_bom(json))?;
         let mut file_definitions = HashMap::new();
         for (matcher, definition) in raw.file_definitions {
             file_definitions.insert(matcher, resolve_definition(definition)?);

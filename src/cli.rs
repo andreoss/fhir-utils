@@ -262,6 +262,24 @@ fn trailing_name(url: &str) -> &str {
     url.rsplit(['/', ':']).next().unwrap_or(url)
 }
 
+pub fn safe_segment(value: &str) -> String {
+    let mapped: String = value
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if mapped.is_empty() || mapped.chars().all(|c| c == '.') {
+        "_".to_string()
+    } else {
+        mapped
+    }
+}
+
 fn write_resource(
     output: &Path,
     group_by_key: &str,
@@ -275,15 +293,28 @@ fn write_resource(
     let file_id = safe_file_id(resource);
     let count = counters.next(group_by_key, &format!("{resource_type}-{file_id}"));
 
-    let directory = output.join(group_by_key);
-    fs::create_dir_all(&directory)?;
+    let segment = safe_segment(group_by_key);
+    let directory = output.join(&segment);
+    fs::create_dir_all(&directory).map_err(|error| {
+        Error::Config(format!(
+            "cannot create {} for group key {group_by_key}: {error}",
+            directory.display()
+        ))
+    })?;
+
     let path = directory.join(format!(
-        "{group_by_key}-{resource_type}-{file_id}-{count:05}.json"
+        "{segment}-{resource_type}-{file_id}-{count:05}.json"
     ));
     fs::write(
         &path,
         format!("{}\n", serde_json::to_string_pretty(resource)?),
-    )?;
+    )
+    .map_err(|error| {
+        Error::Config(format!(
+            "cannot write {} for group key {group_by_key}: {error}",
+            path.display()
+        ))
+    })?;
     Ok(path)
 }
 
@@ -438,6 +469,42 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn group_keys_cannot_escape_the_output_directory() {
+        assert_eq!(safe_segment("../../escaped"), ".._.._escaped");
+        assert_eq!(safe_segment("/etc/passwd"), "_etc_passwd");
+        assert_eq!(safe_segment(".."), "_");
+        assert_eq!(safe_segment("."), "_");
+        assert_eq!(safe_segment(""), "_");
+        assert_eq!(safe_segment("a\0b"), "a_b");
+        assert_eq!(safe_segment("Пациент-1"), "Пациент-1");
+        assert_eq!(safe_segment("with space"), "with space");
+        assert_eq!(safe_segment("1.2.3"), "1.2.3");
+    }
+
+    #[test]
+    #[serial]
+    fn a_crafted_group_key_stays_inside_the_output_directory() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("input/patient.csv"),
+            "patientInternalId,nameLast\n../../escaped,Evil\n",
+        )
+        .unwrap();
+        let root = TempDir::new().unwrap();
+        let output = root.path().join("out");
+
+        run_convert(&ConvertRequest::directory(base.path(), &output)).unwrap();
+
+        let written: Vec<PathBuf> = fs::read_dir(&output)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(written.len(), 1);
+        assert!(written[0].starts_with(&output));
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
     }
 
     #[test]
