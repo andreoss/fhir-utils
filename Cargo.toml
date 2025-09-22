@@ -3,7 +3,9 @@ name = "fhir-utils"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
-description = "Delimited and fixed-width records to FHIR JSON, driven by a data contract"
+description = "Reads delimited and fixed-width record files and maps them to FHIR JSON resources. Column mapping, code translation, and resource shaping are declared in a JSON data contract rather than in code — so onboarding a new source extract is a config change, not a patch."
+keywords = ["fhir", "healthcare", "hl7", "etl", "csv"]
+categories = ["command-line-utilities", "parser-implementations", "science"]
 rust-version = "1.80"
 
 [dependencies]
