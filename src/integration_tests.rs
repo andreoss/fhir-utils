@@ -67,6 +67,27 @@ mod tests {
     }
 
     #[test]
+    fn test_join_data_reader_params_are_optional() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "labs": {
+                    "fileType": "csv",
+                    "resourceType": "Observation",
+                    "groupByKey": "mrn",
+                    "tasks": [{
+                        "task": "join_data",
+                        "secondary_data_source": "wards.csv",
+                        "join_type": "left",
+                        "join_on": "mrn"
+                    }]
+                }
+            }
+        }"#;
+        assert!(Contract::load(json).is_ok());
+    }
+
+    #[test]
     fn test_reject_invalid_timezone() {
         let json = read_fixture("invalid_timezone.json");
         let err = Contract::load(&json).unwrap_err();

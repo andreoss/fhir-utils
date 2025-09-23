@@ -103,22 +103,36 @@ pub(crate) fn resolve_skip_rows(skiprows: &Option<SkipRows>) -> Result<Vec<usize
 pub(crate) fn resolve_headers<R: Read + Seek>(
     reader: &mut R,
     params: &ReaderParams,
-) -> Result<Vec<String>, Error> {
+    skip_rows: &[usize],
+) -> Result<(Vec<String>, Option<usize>), Error> {
     match &params.headers {
-        Some(Headers::List(list)) => Ok(list.clone()),
-        Some(Headers::Dict(dict)) => Ok(dict.iter().map(|h| h.name.clone()).collect()),
-        Some(Headers::WidthMap(map)) => {
-            Ok(map.entries().iter().map(|(name, _)| name.clone()).collect())
-        }
+        Some(Headers::List(list)) => Ok((list.clone(), None)),
+        Some(Headers::Dict(dict)) => Ok((dict.iter().map(|h| h.name.clone()).collect(), None)),
+        Some(Headers::WidthMap(map)) => Ok((
+            map.entries().iter().map(|(name, _)| name.clone()).collect(),
+            None,
+        )),
         None => {
             let mut csv_reader = ReaderBuilder::new()
                 .delimiter(params.value_delimiter as u8)
-                .has_headers(true)
+                .has_headers(false)
                 .flexible(true)
                 .from_reader(&mut *reader);
-            let headers = csv_reader.headers()?.clone();
+
+            let mut header = None;
+            for (index, record) in csv_reader.records().enumerate() {
+                if skip_rows.contains(&index) {
+                    continue;
+                }
+                let record = record?;
+                header = Some((
+                    record.iter().map(|value| value.to_string()).collect(),
+                    Some(index),
+                ));
+                break;
+            }
             reader.seek(SeekFrom::Start(0))?;
-            Ok(headers.iter().map(|s| s.to_string()).collect())
+            Ok(header.unwrap_or_else(|| (Vec::new(), None)))
         }
     }
 }
