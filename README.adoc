@@ -1,0 +1,175 @@
+= fhir-utils
+
+Reads delimited and fixed-width record files and maps them to FHIR JSON resources.
+Column mapping, code translation and resource shaping are declared in a JSON data
+contract, so onboarding a new source extract is a configuration change, not a patch.
+
+== Build
+
+[source,shell]
+----
+cargo build --release                                        # target/release/fhir-utils
+cargo build --release --target x86_64-unknown-linux-musl     # fully static binary
+cargo test                                                   # unit, integration, end-to-end
+----
+
+== Commands
+
+[cols="2,3"]
+|===
+| Command | Purpose
+| `fhir-utils validate -f <contract.json>` | validate a data contract
+| `fhir-utils convert -d <base> -o <out>` | convert every input under `<base>/input`
+| `fhir-utils convert -f <file> -c <config-dir> -o <out>` | convert one file
+|===
+
+[cols="1,3,1"]
+|===
+| Flag | Meaning | Required
+| `-f`, `--file` | contract file for `validate`, input file for `convert` | yes for `validate`
+| `-d`, `--directory` | base directory holding `input/` and `config/` | one of `-d` or `-f`
+| `-c`, `--config-dir` | directory holding the contract | with `-f`
+| `-o`, `--output` | output directory, created when missing | yes for `convert`
+| `--strict` | fail on a task error or an empty group key | no
+|===
+
+`-d` and `-f` are mutually exclusive, `-f` requires `-c`, and `-d` requires both
+`<base>/input` and `<base>/config`. Exit code `0` on success, `1` on an invalid
+contract, a missing path or a row conversion failure.
+
+== Quickstart
+
+Source extract `input/patients.csv` with headers that do not match the internal model:
+
+....
+MRN,LastName,FirstName,Sex,DOB,SSN
+1234567,Smith,Ann,F,1980-01-02,123-45-6789
+7654321,Jones,Bob,M,1975-11-30,
+....
+
+Code map `config/sex.csv`, two columns, header names fixed:
+
+....
+source_value,target_value
+F,female
+M,male
+....
+
+Contract `config/data-contract.json`:
+
+[source,json]
+----
+{
+  "general": {
+    "timeZone": "America/New_York",
+    "tenantId": "hospital-a",
+    "streamType": "live"
+  },
+  "fileDefinitions": {
+    "patients": {
+      "fileType": "csv",
+      "resourceType": "Patient",
+      "groupByKey": "MRN",
+      "tasks": [
+        {
+          "task": "rename_columns",
+          "column_map": {
+            "MRN": "mrn",
+            "LastName": "nameLast",
+            "FirstName": "nameFirst",
+            "Sex": "gender",
+            "DOB": "birthDate",
+            "SSN": "ssn"
+          }
+        },
+        { "task": "map_codes", "code_map": { "gender": "sex.csv" } }
+      ]
+    }
+  }
+}
+----
+
+Run:
+
+[source,shell]
+----
+fhir-utils validate -f config/data-contract.json
+fhir-utils convert -f input/patients.csv -c config -o out
+fhir-utils convert --strict -f input/patients.csv -c config -o out
+----
+
+Result:
+
+....
+out/1234567/1234567-Patient-patients-00001.json
+out/7654321/7654321-Patient-patients-00001.json
+....
+
+The key `patients` matches the file name `patients.csv`, `groupByKey` names the source
+column because grouping happens before tasks, and `sex.csv` resolves against the
+configuration directory. Target column names follow the internal record model, for
+example `mrn`, `nameLast`, `gender`, `birthDate`, `ssn`.
+
+== Contract
+
+[cols="1,3,1"]
+|===
+| Key | Description | Required
+| `general.timeZone` | IANA zone used to localize naive datetimes | yes
+| `general.tenantId` | tenant identifier injected into every row | yes
+| `general.streamType` | `live` or `historical` | yes
+| `general.assigningAuthority` | identifier system for PI, MR, AN, VN, RI, RXN | no
+| `general.emptyFieldValues` | values read as null | no
+| `general.regexFilenames` | match file definition keys as regular expressions | no
+| `fileDefinitions.<key>.fileType` | `csv` or `fixed-width` | no
+| `fileDefinitions.<key>.resourceType` | one of the resource keys | yes
+| `fileDefinitions.<key>.groupByKey` | source column that groups the output | yes
+| `fileDefinitions.<key>.skiprows` | zero-based line numbers dropped before the header | no
+| `fileDefinitions.<key>.headers` | column names, or names with widths | no
+| `fileDefinitions.<key>.tasks` | ordered tasks appended after the default chain | no
+|===
+
+- Every `general` key is injected into each row as a constant.
+- A key matches when it is a substring of the input file name without its extension;
+  longest key first, then alphabetically.
+- Fixed-width files need a width form of `headers`; otherwise the first remaining line
+  supplies the column names.
+- Input files matching no definition are skipped and named in the summary.
+
+== Output
+
+- Path: `<out>/<groupByKey>/<groupByKey>-<resourceType>-<safeFileId>-<nnnnn>.json`.
+- The counter runs per group key, resource type and source file.
+- JSON is pretty printed with sorted keys.
+- `safeFileId` and group key values are made file-system safe: everything outside
+  `[A-Za-z0-9-]` becomes `_`.
+- Re-running overwrites matching file names and leaves earlier files in place.
+- The summary goes to standard output; warnings and errors go to standard error.
+- Warnings print by default; `RUST_LOG=info` adds per-file detail.
+
+== Errors and strict mode
+
+[cols="1,2"]
+|===
+| Class | Behaviour
+| Contract or validation error | run stops
+| Missing file definition | file skipped
+| Task failure | warning, pipeline continues; fatal with `--strict`
+| Rows without a group key | warning once per file; fatal with `--strict`
+| Row conversion error | run stops with the group key and file
+|===
+
+== Configuration
+
+[cols="1,2,1"]
+|===
+| Variable | Meaning | Default
+| `CSV_BUFFER_SIZE` | rows per chunk | `1000`
+| `MAPPING_CONFIG_DIRECTORY` | contract directory | `/var/app/config`
+| `MAPPING_CONFIG_FILE_NAME` | contract file name | `data-contract.json`
+|===
+
+Settings are read once per process. Contracts, external file definitions, mapping files
+and join sources open through one pluggable opener: local paths and `file://` URIs work
+out of the box, other schemes need a backend registered with `opener::set_opener`. The
+opener is scoped to the calling thread, so each worker thread installs its own.
