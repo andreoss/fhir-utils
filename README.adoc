@@ -180,15 +180,15 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 |===
 | Task | Parameters
 | `add_constant` | `name`, `value` as string, number, boolean or list
-| `add_row_num` | `starting_index`
+| `add_row_num` | `starting_index`, default `1`
 | `append_list` | `source_columns`, `target_column`, `discard_if_duplicate`
 | `build_object_array` | `entry_class`, `target_column`, `entries`
 | `change_case` | `columns`, `casing` as `UPPER` or `LOWER`
-| `compare_to_date` | `column`, `target_column`, `compare_date`, `comparison`, `true_string`, `false_string`
+| `compare_to_date` | `column`, `target_column`; optional `compare_date`, `comparison`, `true_string`, `false_string`
 | `conditional_column` | `source_column`, `target_column`, `condition_map`
 | `conditional_column_update` | `source_column`, `target_column`, `condition_map`
 | `condition_column_with_prerequisite` | + `prerequisite_column`, `prerequisite_match`
-| `convert_to_list` | `column`, `separator`
+| `convert_to_list` | `column`, `separator` default `,`
 | `copy_columns` | `columns`, `target_column`, `value_separator`
 | `filter_to_columns` | `source_column`, `target_columns`, `filters`
 | `find_not_null_value` | `columns`, `target_column`

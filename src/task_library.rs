@@ -267,7 +267,11 @@ fn build_object_array(
 
 fn change_case(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
     let columns = string_list_param(params, "change_case", "columns")?;
-    let casing = string_param(params, "change_case", "casing")?.to_ascii_uppercase();
+    let casing = params
+        .get("casing")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_ascii_uppercase();
     let upper = casing.contains("UPPER");
     let lower = casing.contains("LOWER");
     if upper == lower {
@@ -461,7 +465,10 @@ fn condition_column_with_prerequisite(
 
 fn convert_to_list(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
     let column = string_param(params, "convert_to_list", "column")?;
-    let separator = string_param(params, "convert_to_list", "separator")?;
+    let separator = params
+        .get("separator")
+        .and_then(|value| value.as_str())
+        .unwrap_or(",");
     if !batch.columns.contains_key(column) {
         return Ok(());
     }
@@ -1094,6 +1101,34 @@ mod tests {
             json!({"columns": ["a"], "casing": "UPPER LOWER"}),
         );
         assert_eq!(column(&data, "a"), vec![Some("ab".into()), None]);
+    }
+
+    #[test]
+    fn change_case_without_casing_is_a_no_op() {
+        let mut data = batch(&[("a", &[Some("Ab")])]);
+        run(&mut data, "change_case", json!({"columns": ["a"]}));
+        assert_eq!(column(&data, "a"), vec![Some("Ab".into())]);
+    }
+
+    #[test]
+    fn compare_to_date_defaults_compare_today_or_before_true_false() {
+        let mut data = batch(&[("d", &[Some("1990-01-01"), None])]);
+        run(
+            &mut data,
+            "compare_to_date",
+            json!({"column": "d", "target_column": "past"}),
+        );
+        assert_eq!(
+            column(&data, "past"),
+            vec![Some("TRUE".into()), Some("FALSE".into())]
+        );
+    }
+
+    #[test]
+    fn convert_to_list_defaults_to_a_comma_separator() {
+        let mut data = batch(&[("codes", &[Some("a,b,c")])]);
+        run(&mut data, "convert_to_list", json!({"column": "codes"}));
+        assert_eq!(column(&data, "codes"), vec![Some("a|b|c".into())]);
     }
 
     #[test]

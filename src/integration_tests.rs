@@ -88,6 +88,27 @@ mod tests {
     }
 
     #[test]
+    fn test_optional_task_params_validate_without_values() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "patient": {
+                    "fileType": "csv",
+                    "resourceType": "Patient",
+                    "groupByKey": "mrn",
+                    "tasks": [
+                        {"task": "add_row_num"},
+                        {"task": "change_case", "columns": ["gender"]},
+                        {"task": "convert_to_list", "column": "race"},
+                        {"task": "compare_to_date", "column": "birthDate", "target_column": "born"}
+                    ]
+                }
+            }
+        }"#;
+        assert!(Contract::load(json).is_ok());
+    }
+
+    #[test]
     fn test_task_comments_are_accepted() {
         let json = r#"{
             "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},

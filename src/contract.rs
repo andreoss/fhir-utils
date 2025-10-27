@@ -349,18 +349,11 @@ impl Contract {
     ) -> Result<(), Error> {
         let required_params = match task_name {
             "add_constant" => &["name", "value"][..],
-            "add_row_num" => &["starting_index"][..],
+            "add_row_num" => &[][..],
             "append_list" => &["source_columns", "target_column"][..],
             "build_object_array" => &["entry_class", "target_column", "entries"][..],
-            "change_case" => &["columns", "casing"][..],
-            "compare_to_date" => &[
-                "column",
-                "target_column",
-                "compare_date",
-                "comparison",
-                "true_string",
-                "false_string",
-            ][..],
+            "change_case" => &["columns"][..],
+            "compare_to_date" => &["column", "target_column"][..],
             "conditional_column" => &["source_column", "target_column", "condition_map"][..],
             "conditional_column_update" => &["source_column", "target_column", "condition_map"][..],
             "condition_column_with_prerequisite" => &[
@@ -370,7 +363,7 @@ impl Contract {
                 "prerequisite_column",
                 "prerequisite_match",
             ][..],
-            "convert_to_list" => &["column", "separator"][..],
+            "convert_to_list" => &["column"][..],
             "copy_columns" => &["columns", "target_column"][..],
             "filter_to_columns" => &["source_column", "target_columns", "filters"][..],
             "find_not_null_value" => &["columns", "target_column"][..],

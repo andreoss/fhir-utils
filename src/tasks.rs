@@ -118,8 +118,7 @@ fn add_row_num(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Resu
     let starting_index = params
         .get("starting_index")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| Error::MissingTaskParam("add_row_num.starting_index".into()))?
-        as usize;
+        .unwrap_or(1) as usize;
 
     let column = batch.columns.entry("rowNum".to_string()).or_default();
     column.clear();
@@ -261,6 +260,18 @@ mod tests {
         assert_eq!(
             batch.get_column("rowNum").unwrap(),
             &vec![Some("5".into()), Some("6".into()), Some("7".into())]
+        );
+    }
+
+    #[test]
+    fn test_add_row_num_defaults_to_one() {
+        let mut batch = make_batch_with_columns(HashMap::new());
+        batch.row_count = 2;
+
+        add_row_num(&mut batch, &HashMap::new()).unwrap();
+        assert_eq!(
+            batch.get_column("rowNum").unwrap(),
+            &vec![Some("1".into()), Some("2".into())]
         );
     }
 
