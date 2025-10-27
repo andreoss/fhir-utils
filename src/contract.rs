@@ -445,6 +445,20 @@ impl Contract {
             }
         }
 
+        if task_name == "join_data" {
+            if let Some(reader_params) = params.get("reader_params").and_then(|v| v.as_object()) {
+                const KNOWN: &[&str] = &["valueDelimiter", "sep", "skiprows", "headers"];
+                for key in reader_params.keys() {
+                    if !KNOWN.contains(&key.as_str()) {
+                        return Err(Error::UnknownTaskParam(format!(
+                            "join_data.reader_params.{key}; accepted: {}",
+                            KNOWN.join(", ")
+                        )));
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }

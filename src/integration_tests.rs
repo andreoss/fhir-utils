@@ -129,6 +129,30 @@ mod tests {
     }
 
     #[test]
+    fn test_unknown_join_reader_params_are_rejected_naming_the_accepted_keys() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "labs": {
+                    "fileType": "csv",
+                    "resourceType": "Observation",
+                    "groupByKey": "mrn",
+                    "tasks": [{
+                        "task": "join_data",
+                        "secondary_data_source": "wards.csv",
+                        "join_type": "left",
+                        "join_on": "mrn",
+                        "reader_params": {"skip_rows": 1}
+                    }]
+                }
+            }
+        }"#;
+        let error = Contract::load(json).unwrap_err().to_string();
+        assert!(error.contains("join_data.reader_params.skip_rows"), "{error}");
+        assert!(error.contains("skiprows"), "{error}");
+    }
+
+    #[test]
     fn test_reject_invalid_timezone() {
         let json = read_fixture("invalid_timezone.json");
         let err = Contract::load(&json).unwrap_err();
