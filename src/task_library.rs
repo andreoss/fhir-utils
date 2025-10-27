@@ -28,7 +28,70 @@ const ENTRY_CLASSES: &[(&str, &[&str])] = &[
     ("IdentifierDetails", &["name", "value", "system"]),
 ];
 
+pub const COERCION_NAMES: &[&str] = &[
+    "STRING",
+    "INTEGER",
+    "DECIMAL",
+    "BOOLEAN",
+    "BASE64",
+    "CLEAN_SSN",
+    "NAMED_UUID",
+];
+
+/// Applies a named coercion; a value the coercion rejects becomes null.
+fn coerce_value(name: &str, value: &str) -> Option<String> {
+    match name {
+        "STRING" => Some(value.trim().to_string()),
+        "INTEGER" => value
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.fract() == 0.0)
+            .map(|number| (number as i64).to_string())
+            .or_else(|| value.trim().parse::<i64>().ok().map(|n| n.to_string())),
+        "DECIMAL" => value
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .map(|number| number.to_string()),
+        "BOOLEAN" => match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "t" | "yes" | "y" | "1" => Some("true".to_string()),
+            "false" | "f" | "no" | "n" | "0" => Some("false".to_string()),
+            _ => None,
+        },
+        "BASE64" => {
+            use base64::Engine as _;
+            Some(base64::engine::general_purpose::STANDARD.encode(value.as_bytes()))
+        }
+        "CLEAN_SSN" => crate::fhirutils::identifiers::normalize_ssn(value),
+        "NAMED_UUID" => {
+            Some(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, value.as_bytes()).to_string())
+        }
+        _ => None,
+    }
+}
+
+fn coerce(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
+    let types = map_param(params, "coerce", "types")?;
+    for (column, name) in types {
+        let name = name
+            .as_str()
+            .ok_or_else(|| missing("coerce", "types"))?
+            .to_ascii_uppercase();
+        if !batch.columns.contains_key(column) {
+            continue;
+        }
+        let mut values = Vec::with_capacity(batch.row_count);
+        for row in 0..batch.row_count {
+            values.push(cell(batch, column, row).and_then(|value| coerce_value(&name, value)));
+        }
+        set_column(batch, column, values);
+    }
+    Ok(())
+}
+
 pub fn register(registry: &mut TaskRegistry) {
+    registry.register("coerce", Arc::new(coerce));
     registry.register("derive_resource_id", Arc::new(derive_resource_id));
     registry.register("append_list", Arc::new(append_list));
     registry.register("build_object_array", Arc::new(build_object_array));
@@ -1161,6 +1224,54 @@ mod tests {
             json!({"columns": ["a"], "casing": "UPPER LOWER"}),
         );
         assert_eq!(column(&data, "a"), vec![Some("ab".into()), None]);
+    }
+
+    #[test]
+    fn coerce_applies_named_coercions_and_clears_rejected_values() {
+        let mut data = batch(&[
+            ("count", &[Some("2.0"), Some("abc")]),
+            ("ratio", &[Some("1.50"), Some("x")]),
+            ("flag", &[Some("Y"), Some("maybe")]),
+            ("blob", &[Some("hi"), None]),
+            ("ssn", &[Some("123-45-6789"), Some("111111111")]),
+            ("key", &[Some("m1"), Some("m1")]),
+            ("name", &[Some("  Ann "), Some("Bob")]),
+        ]);
+        run(
+            &mut data,
+            "coerce",
+            json!({"types": {
+                "count": "INTEGER",
+                "ratio": "DECIMAL",
+                "flag": "boolean",
+                "blob": "BASE64",
+                "ssn": "CLEAN_SSN",
+                "key": "NAMED_UUID",
+                "name": "STRING"
+            }}),
+        );
+        assert_eq!(column(&data, "count"), vec![Some("2".into()), None]);
+        assert_eq!(column(&data, "ratio"), vec![Some("1.5".into()), None]);
+        assert_eq!(column(&data, "flag"), vec![Some("true".into()), None]);
+        assert_eq!(column(&data, "blob"), vec![Some("aGk=".into()), None]);
+        assert_eq!(
+            column(&data, "ssn"),
+            vec![Some("123456789".into()), None]
+        );
+        let keys = column(&data, "key");
+        assert_eq!(keys[0], keys[1]);
+        assert_eq!(
+            keys[0].as_deref(),
+            Some(
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"m1")
+                    .to_string()
+                    .as_str()
+            )
+        );
+        assert_eq!(
+            column(&data, "name"),
+            vec![Some("Ann".into()), Some("Bob".into())]
+        );
     }
 
     #[test]

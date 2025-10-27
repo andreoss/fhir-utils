@@ -242,6 +242,7 @@ const KNOWN_TASKS: &[&str] = &[
     "derive_resource_id",
     "build_object_array",
     "change_case",
+    "coerce",
     "compare_to_date",
     "conditional_column",
     "conditional_column_update",
@@ -399,6 +400,7 @@ impl Contract {
             "append_list" => &["source_columns", "target_column"][..],
             "build_object_array" => &["entry_class", "target_column", "entries"][..],
             "change_case" => &["columns"][..],
+            "coerce" => &["types"][..],
             "compare_to_date" => &["column", "target_column"][..],
             "conditional_column" => &["source_column", "target_column", "condition_map"][..],
             "conditional_column_update" => &["source_column", "target_column", "condition_map"][..],
@@ -441,6 +443,7 @@ impl Contract {
                 "append_list" => &["source_columns", "target_column", "discard_if_duplicate"][..],
                 "build_object_array" => &["entry_class", "target_column", "entries"][..],
                 "change_case" => &["columns", "casing"][..],
+                "coerce" => &["types"][..],
                 "compare_to_date" => &[
                     "column",
                     "target_column",
@@ -483,6 +486,23 @@ impl Contract {
             };
             if !known_params.contains(&param.as_str()) {
                 return Err(Error::UnknownTaskParam(format!("{task_name}.{param}")));
+            }
+        }
+
+        if task_name == "coerce" {
+            if let Some(types) = params.get("types").and_then(|v| v.as_object()) {
+                let known = crate::task_library::COERCION_NAMES;
+                for (column, name) in types {
+                    let valid = name
+                        .as_str()
+                        .is_some_and(|name| known.contains(&name.to_ascii_uppercase().as_str()));
+                    if !valid {
+                        return Err(Error::Config(format!(
+                            "coerce.types.{column} names an unknown coercion; accepted: {}",
+                            known.join(", ")
+                        )));
+                    }
+                }
             }
         }
 

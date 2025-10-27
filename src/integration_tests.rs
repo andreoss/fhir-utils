@@ -173,6 +173,24 @@ mod tests {
     }
 
     #[test]
+    fn test_unknown_coercion_names_are_rejected_naming_the_accepted_ones() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "p": {
+                    "fileType": "csv",
+                    "resourceType": "Patient",
+                    "groupByKey": "mrn",
+                    "tasks": [{"task": "coerce", "types": {"age": "NUMBERISH"}}]
+                }
+            }
+        }"#;
+        let error = Contract::load(json).unwrap_err().to_string();
+        assert!(error.contains("coerce.types.age"), "{error}");
+        assert!(error.contains("NAMED_UUID"), "{error}");
+    }
+
+    #[test]
     fn test_task_comments_are_accepted() {
         let json = r#"{
             "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},

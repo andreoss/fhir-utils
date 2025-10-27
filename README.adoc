@@ -188,6 +188,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 | `append_list` | `source_columns`, `target_column`, `discard_if_duplicate`
 | `build_object_array` | `entry_class`, `target_column`, `entries`
 | `change_case` | `columns`, `casing` as `UPPER` or `LOWER`
+| `coerce` | `types` mapping columns to `STRING`, `INTEGER`, `DECIMAL`, `BOOLEAN`, `BASE64`, `CLEAN_SSN` or `NAMED_UUID`; rejected values become null
 | `compare_to_date` | `column`, `target_column`; optional `compare_date`, `comparison`, `true_string`, `false_string`
 | `conditional_column` | `source_column`, `target_column`, `condition_map`
 | `conditional_column_update` | `source_column`, `target_column`, `condition_map`
