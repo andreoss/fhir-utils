@@ -108,6 +108,13 @@ pub(crate) fn resolve_headers<R: Read + Seek>(
     match &params.headers {
         Some(Headers::List(list)) => Ok((list.clone(), None)),
         Some(Headers::Dict(dict)) => Ok((dict.iter().map(|h| h.name.clone()).collect(), None)),
+        Some(Headers::Commented(entries)) => Ok((
+            entries
+                .iter()
+                .flat_map(|entry| entry.keys().cloned())
+                .collect(),
+            None,
+        )),
         Some(Headers::WidthMap(map)) => Ok((
             map.entries().iter().map(|(name, _)| name.clone()).collect(),
             None,
@@ -424,6 +431,39 @@ mod tests {
         assert_eq!(
             batch.get_column("field2").unwrap(),
             &vec![Some("abcdefghij".into())]
+        );
+    }
+
+    #[test]
+    fn test_commented_headers_name_the_columns() {
+        let contract = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "patients": {
+                    "fileType": "csv",
+                    "resourceType": "Patient",
+                    "groupByKey": "mrn",
+                    "headers": [
+                        {"mrn": "medical record number"},
+                        {"nameLast": "family name"}
+                    ]
+                }
+            }
+        }"#;
+        let contract = crate::contract::Contract::load(contract).unwrap();
+        let def = contract.file_definitions.get("patients").unwrap();
+        let params = ReaderParams::from_file_definition(def, None);
+
+        let mut cursor = Cursor::new("1234,Smith\n5678,Jones\n");
+        let batch = read_delimited(&mut cursor, &params).unwrap();
+        assert_eq!(batch.row_count, 2);
+        assert_eq!(
+            batch.get_column("mrn").unwrap(),
+            &vec![Some("1234".into()), Some("5678".into())]
+        );
+        assert_eq!(
+            batch.get_column("nameLast").unwrap(),
+            &vec![Some("Smith".into()), Some("Jones".into())]
         );
     }
 

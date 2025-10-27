@@ -85,6 +85,7 @@ pub enum SkipRows {
 pub enum Headers {
     List(Vec<String>),
     Dict(Vec<HeaderDict>),
+    Commented(Vec<std::collections::BTreeMap<String, String>>),
     WidthMap(WidthMap),
 }
 
