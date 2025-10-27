@@ -132,8 +132,7 @@ fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
     }
 }
 
-pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
-    let (inputs, config_dir) = resolve_inputs(request)?;
+fn load_contract(request: &ConvertRequest, config_dir: &Path) -> Result<Contract, Error> {
     let contract_path = config_dir.join(&config().mapping_config_file_name);
     let remote_config = opener::scheme(&config_dir.to_string_lossy()).is_some();
     if !remote_config && !contract_path.exists() {
@@ -146,7 +145,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let source_opener = request
         .opener
         .clone()
-        .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.clone())));
+        .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.to_path_buf())));
     opener::set_opener(source_opener);
     let contract_text = if remote_config {
         opener::read_to_string(&contract_path.to_string_lossy())?
@@ -161,6 +160,55 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     for warning in &warnings {
         warn!("{warning}");
     }
+    Ok(contract)
+}
+
+pub fn run_transform(
+    request: &ConvertRequest,
+    out: &mut dyn std::io::Write,
+) -> Result<ConvertSummary, Error> {
+    let (inputs, config_dir) = resolve_inputs(request)?;
+    let contract = load_contract(request, &config_dir)?;
+    let registry = TaskRegistry::new();
+    let mut summary = ConvertSummary::default();
+
+    for input in inputs {
+        let stem = file_stem(&input);
+        let (_, file_def) = match matched_definition(&contract, &stem) {
+            Ok(found) => found,
+            Err(_) => {
+                summary.skipped_files.push(file_name(&input));
+                continue;
+            }
+        };
+        let file_path = input.to_string_lossy().to_string();
+        let options = ConversionOptions {
+            contract: &contract,
+            file_def,
+            file_path: &file_path,
+            registry: &registry,
+            buffer_size: config().csv_buffer_size,
+            strict: request.strict,
+        };
+
+        summary.files += 1;
+        let rows = crate::converter::transform(&input, options)
+            .map_err(|error| input_failure(&file_path, "", error))?;
+        for row in rows {
+            summary.rows += 1;
+            if let Some(error) = row.exception {
+                return Err(input_failure(&file_path, &row.group_by_key, error));
+            }
+            writeln!(out, "{}", serde_json::to_string(&row.record)?)
+                .map_err(|error| Error::Config(format!("cannot write a record: {error}")))?;
+        }
+    }
+    Ok(summary)
+}
+
+pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
+    let (inputs, config_dir) = resolve_inputs(request)?;
+    let contract = load_contract(request, &config_dir)?;
     let registry = TaskRegistry::new();
     let output = &request.output;
     let writer: Arc<dyn Opener> = if opener::scheme(&output.to_string_lossy()).is_some() {
@@ -565,6 +613,26 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn transform_emits_internal_records_as_json_lines() {
+        let base = base_directory();
+        let request = ConvertRequest::directory(base.path(), Path::new("unused"));
+        let mut out = Vec::new();
+        let summary = run_transform(&request, &mut out).unwrap();
+        assert_eq!(summary.files, 1);
+        assert_eq!(summary.rows, 2);
+
+        let lines: Vec<serde_json::Value> = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["nameLast"], json!("Smith"));
+        assert_eq!(lines[0]["groupByKey"], json!("p1"));
+        assert_eq!(lines[0]["tenantId"], json!("tenant1"));
     }
 
     #[test]

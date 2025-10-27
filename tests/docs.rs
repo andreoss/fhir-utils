@@ -53,6 +53,7 @@ fn every_command_and_flag_is_documented() {
     for item in [
         "validate",
         "convert",
+        "transform",
         "-d",
         "-f",
         "-c",

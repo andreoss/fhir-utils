@@ -19,6 +19,30 @@ enum Commands {
         #[arg(short, long, help = "Path to the contract JSON file")]
         file: String,
     },
+    #[command(about = "Emit the normalized internal records instead of FHIR resources")]
+    Transform {
+        #[arg(
+            short = 'd',
+            long,
+            conflicts_with = "file",
+            help = "Base directory holding input/ and config/"
+        )]
+        directory: Option<PathBuf>,
+        #[arg(
+            short = 'f',
+            long,
+            help = "Single input file; needs --config-dir or MAPPING_CONFIG_DIRECTORY"
+        )]
+        file: Option<PathBuf>,
+        #[arg(
+            short = 'c',
+            long,
+            help = "Configuration directory holding the data contract"
+        )]
+        config_dir: Option<PathBuf>,
+        #[arg(long, help = "Fail the run on a task error or an empty group key")]
+        strict: bool,
+    },
     #[command(about = "Convert delimited or fixed-width records to FHIR resources")]
     Convert {
         #[arg(
@@ -59,6 +83,12 @@ fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         Commands::Validate { file } => run_validate(&file),
+        Commands::Transform {
+            directory,
+            file,
+            config_dir,
+            strict,
+        } => run_transformation(directory, file, config_dir, strict),
         Commands::Convert {
             directory,
             file,
@@ -113,6 +143,37 @@ fn run_validate(file: &str) -> Result<(), Error> {
         eprintln!("warning: {warning}");
     }
     println!("Contract is valid");
+    Ok(())
+}
+
+fn run_transformation(
+    directory: Option<PathBuf>,
+    file: Option<PathBuf>,
+    config_dir: Option<PathBuf>,
+    strict: bool,
+) -> Result<(), Error> {
+    if directory.is_none() && file.is_none() {
+        return Err(Error::Config("transform needs -d or -f".into()));
+    }
+
+    let summary = fhir_utils::cli::run_transform(
+        &ConvertRequest {
+            base: directory,
+            file,
+            config_dir,
+            output: PathBuf::new(),
+            opener: None,
+            strict,
+        },
+        &mut std::io::stdout(),
+    )?;
+    eprintln!(
+        "Transformed {} file(s), read {} row(s), skipped {} file(s){}",
+        summary.files,
+        summary.rows,
+        summary.skipped(),
+        skipped_detail(&summary.skipped_files)
+    );
     Ok(())
 }
 
