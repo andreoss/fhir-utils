@@ -66,10 +66,7 @@ impl Opener for LocalOpener {
                 if let Some(parent) = path.parent() {
                     if !parent.as_os_str().is_empty() {
                         std::fs::create_dir_all(parent).map_err(|error| {
-                            Error::Config(format!(
-                                "cannot create {}: {error}",
-                                parent.display()
-                            ))
+                            Error::Config(format!("cannot create {}: {error}", parent.display()))
                         })?;
                     }
                 }
@@ -292,9 +289,11 @@ mod tests {
 
     #[test]
     fn gz_sources_are_inflated() {
-        let mut file = tempfile::Builder::new().suffix(".csv.gz").tempfile().unwrap();
-        let mut encoder =
-            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut file = tempfile::Builder::new()
+            .suffix(".csv.gz")
+            .tempfile()
+            .unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         encoder.write_all(b"a,b\n1,2\n").unwrap();
         file.write_all(&encoder.finish().unwrap()).unwrap();
         file.flush().unwrap();

@@ -268,7 +268,10 @@ fn mapped_value(
 
 /// Fills empty `resourceInternalId` cells with a name-based UUID of the given
 /// column, so re-running a load yields the same resource ids.
-fn derive_resource_id(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
+fn derive_resource_id(
+    batch: &mut RecordBatch,
+    params: &HashMap<String, Value>,
+) -> Result<(), Error> {
     let column = string_param(params, "derive_resource_id", "column")?;
     if !batch.columns.contains_key(column) {
         return Ok(());
@@ -1254,10 +1257,7 @@ mod tests {
         assert_eq!(column(&data, "ratio"), vec![Some("1.5".into()), None]);
         assert_eq!(column(&data, "flag"), vec![Some("true".into()), None]);
         assert_eq!(column(&data, "blob"), vec![Some("aGk=".into()), None]);
-        assert_eq!(
-            column(&data, "ssn"),
-            vec![Some("123456789".into()), None]
-        );
+        assert_eq!(column(&data, "ssn"), vec![Some("123456789".into()), None]);
         let keys = column(&data, "key");
         assert_eq!(keys[0], keys[1]);
         assert_eq!(
@@ -1278,10 +1278,7 @@ mod tests {
     fn derive_resource_id_fills_empty_ids_deterministically() {
         let mut data = batch(&[
             ("mrn", &[Some("m1"), Some("m1"), Some("m2"), None]),
-            (
-                "resourceInternalId",
-                &[None, None, Some("kept"), None],
-            ),
+            ("resourceInternalId", &[None, None, Some("kept"), None]),
         ]);
         run(&mut data, "derive_resource_id", json!({"column": "mrn"}));
 
@@ -1501,10 +1498,7 @@ mod tests {
     #[test]
     fn format_date_passes_year_only_values_through_silently() {
         REPORTED_UNPARSED.with(|seen| seen.borrow_mut().clear());
-        let mut data = batch(&[
-            ("d", &[Some("1985")]),
-            ("filePath", &[Some("years.csv")]),
-        ]);
+        let mut data = batch(&[("d", &[Some("1985")]), ("filePath", &[Some("years.csv")])]);
         run(&mut data, "format_date", json!({"columns": ["d"]}));
         assert_eq!(column(&data, "d"), vec![Some("1985".into())]);
         let reported = REPORTED_UNPARSED.with(|seen| seen.borrow().len());
@@ -1751,12 +1745,18 @@ mod tests {
         crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
             (
                 "sex.csv".into(),
-                "\u{feff}source_value,target_value\nM,male\n".as_bytes().to_vec(),
+                "\u{feff}source_value,target_value\nM,male\n"
+                    .as_bytes()
+                    .to_vec(),
             ),
         ])));
 
         let mut data = batch(&[("sex", &[Some("M")])]);
-        run(&mut data, "map_codes", json!({"code_map": {"sex": "sex.csv"}}));
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": "sex.csv"}}),
+        );
         assert_eq!(column(&data, "sex"), vec![Some("male".into())]);
 
         crate::opener::set_opener(previous);

@@ -216,7 +216,9 @@ fn resolve_code_systems(value: Option<&serde_json::Value>) -> Result<Vec<(String
         Some(serde_json::Value::String(source)) => {
             let content = crate::opener::read_to_string(source)?;
             serde_json::from_str(without_bom(&content)).map_err(|error| {
-                Error::Config(format!("codeSystems file {source} is not valid JSON: {error}"))
+                Error::Config(format!(
+                    "codeSystems file {source} is not valid JSON: {error}"
+                ))
             })?
         }
         Some(value) => value.clone(),

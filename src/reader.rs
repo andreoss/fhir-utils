@@ -143,8 +143,8 @@ pub(crate) fn resolve_headers<R: Read + Seek>(
         }
         None => {
             let mut header = None;
-            for (index, line) in std::io::BufRead::lines(std::io::BufReader::new(&mut *reader))
-                .enumerate()
+            for (index, line) in
+                std::io::BufRead::lines(std::io::BufReader::new(&mut *reader)).enumerate()
             {
                 if skip_rows.contains(&index) {
                     continue;

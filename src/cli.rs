@@ -311,9 +311,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                     .get("id")
                     .and_then(|value| value.as_str())
                     .unwrap_or_default();
-                if !id.is_empty()
-                    && !seen_ids.insert((resource_type.to_string(), id.to_string()))
-                {
+                if !id.is_empty() && !seen_ids.insert((resource_type.to_string(), id.to_string())) {
                     summary.deduplicated += 1;
                     continue;
                 }
@@ -361,7 +359,13 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
 
     if let Some(bundle_type) = &request.bundle {
         for (group_by_key, resources) in bundles {
-            write_bundle(&*writer, &request.output, &group_by_key, bundle_type, resources)?;
+            write_bundle(
+                &*writer,
+                &request.output,
+                &group_by_key,
+                bundle_type,
+                resources,
+            )?;
         }
     }
 
@@ -376,9 +380,7 @@ fn write_bundle(
     resources: Vec<Value>,
 ) -> Result<PathBuf, Error> {
     let segment = safe_segment(group_by_key);
-    let path = output
-        .join(&segment)
-        .join(format!("{segment}-Bundle.json"));
+    let path = output.join(&segment).join(format!("{segment}-Bundle.json"));
     let bundle = build_bundle(bundle_type, resources);
     let write = |path: &Path| -> Result<(), Error> {
         let mut sink = writer.create(&path.to_string_lossy())?;
@@ -755,8 +757,7 @@ mod tests {
         .unwrap();
         let output = TempDir::new().unwrap();
 
-        let summary =
-            run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        let summary = run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
         assert_eq!(summary.deduplicated, 1);
 
         let mut practitioners = 0;
@@ -773,7 +774,11 @@ mod tests {
         }
         assert_eq!(practitioners, 1);
         assert_eq!(references.len(), 1);
-        assert!(references.iter().next().unwrap().starts_with("Practitioner/"));
+        assert!(references
+            .iter()
+            .next()
+            .unwrap()
+            .starts_with("Practitioner/"));
     }
 
     #[test]
@@ -781,13 +786,11 @@ mod tests {
         let base = base_directory();
         let output = TempDir::new().unwrap();
 
-        let request =
-            ConvertRequest::directory(base.path(), output.path()).bundled("transaction");
+        let request = ConvertRequest::directory(base.path(), output.path()).bundled("transaction");
         let summary = run_convert(&request).unwrap();
         assert!(summary.resources > 0);
 
-        let content =
-            fs::read_to_string(output.path().join("p1/p1-Bundle.json")).unwrap();
+        let content = fs::read_to_string(output.path().join("p1/p1-Bundle.json")).unwrap();
         let bundle: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(bundle["resourceType"], json!("Bundle"));
         assert_eq!(bundle["type"], json!("transaction"));
@@ -904,8 +907,7 @@ mod tests {
         use std::io::Write as _;
         let base = base_directory();
         fs::remove_file(base.path().join("input/patient.csv")).unwrap();
-        let mut encoder =
-            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         encoder
             .write_all(b"patientInternalId,nameLast,nameFirst\np1,Smith,Ann\n")
             .unwrap();
@@ -1017,7 +1019,8 @@ mod tests {
         let base = base_directory();
         fs::write(
             base.path().join("config/data-contract.json"),
-            CONTRACT.replace("\"Patient\"", "\"Observation\"")
+            CONTRACT
+                .replace("\"Patient\"", "\"Observation\"")
                 .replace("patientInternalId", "mrn"),
         )
         .unwrap();
@@ -1051,8 +1054,7 @@ mod tests {
         .unwrap();
         let output = TempDir::new().unwrap();
 
-        let summary =
-            run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        let summary = run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
         assert_eq!(summary.deduplicated, 1);
         assert!(output
             .path()

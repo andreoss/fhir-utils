@@ -134,10 +134,12 @@ mod tests {
     #[serial_test::serial]
     fn test_code_systems_load_from_a_file_through_the_opener() {
         let previous = crate::opener::opener();
-        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![(
-            "systems.json".into(),
-            b"{\"WARD\": \"http://example.org/wards\"}".to_vec(),
-        )])));
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            (
+                "systems.json".into(),
+                b"{\"WARD\": \"http://example.org/wards\"}".to_vec(),
+            ),
+        ])));
 
         let json = r#"{
             "general": {
@@ -230,7 +232,10 @@ mod tests {
             }
         }"#;
         let error = Contract::load(json).unwrap_err().to_string();
-        assert!(error.contains("join_data.reader_params.skip_rows"), "{error}");
+        assert!(
+            error.contains("join_data.reader_params.skip_rows"),
+            "{error}"
+        );
         assert!(error.contains("skiprows"), "{error}");
     }
 
@@ -267,7 +272,11 @@ mod tests {
         }"#;
         let contract = Contract::load(json).unwrap();
         assert_eq!(
-            contract.file_definitions.get("patient").unwrap().resource_type,
+            contract
+                .file_definitions
+                .get("patient")
+                .unwrap()
+                .resource_type,
             "Patient"
         );
         assert_eq!(
