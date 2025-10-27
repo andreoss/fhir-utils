@@ -218,16 +218,29 @@ pub fn add_codeable_concept(
     Some(concept)
 }
 
-/// A bare year between 1900 and 2200, kept as-is per the FHIR partial date rules.
+/// A bare year between 1900 and 2200, or a year-month, kept as-is per the FHIR
+/// partial date rules.
 pub fn partial_date(value: &str) -> Option<&str> {
     let value = value.trim();
-    if value.len() == 4 && value.chars().all(|c| c.is_ascii_digit()) {
-        let year: u32 = value.parse().ok()?;
-        if (1900..=2200).contains(&year) {
-            return Some(value);
-        }
+    let (year, month) = match value.split_once('-') {
+        Some((year, month)) => (year, Some(month)),
+        None => (value, None),
+    };
+    if year.len() != 4 || !year.chars().all(|c| c.is_ascii_digit()) {
+        return None;
     }
-    None
+    let number: u32 = year.parse().ok()?;
+    if !(1900..=2200).contains(&number) {
+        return None;
+    }
+    match month {
+        None => Some(value),
+        Some(month) if month.len() == 2 && month.chars().all(|c| c.is_ascii_digit()) => {
+            let number: u32 = month.parse().ok()?;
+            (1..=12).contains(&number).then_some(value)
+        }
+        Some(_) => None,
+    }
 }
 
 pub fn datetime(value: &str, zone: Option<&str>) -> Option<String> {
@@ -702,6 +715,15 @@ mod tests {
         assert!(date("1899").is_none());
         assert!(date("2201").is_none());
         assert!(partial_date("198a").is_none());
+    }
+
+    #[test]
+    fn year_month_values_stay_partial() {
+        assert_eq!(date("1985-06").unwrap(), "1985-06");
+        assert_eq!(datetime("1985-06", Some("UTC")).unwrap(), "1985-06");
+        assert!(partial_date("1985-13").is_none());
+        assert!(partial_date("1985-6").is_none());
+        assert!(partial_date("1985-0a").is_none());
     }
 
     #[test]
