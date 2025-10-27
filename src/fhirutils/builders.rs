@@ -218,10 +218,26 @@ pub fn add_codeable_concept(
     Some(concept)
 }
 
+/// A bare year between 1900 and 2200, kept as-is per the FHIR partial date rules.
+pub fn partial_date(value: &str) -> Option<&str> {
+    let value = value.trim();
+    if value.len() == 4 && value.chars().all(|c| c.is_ascii_digit()) {
+        let year: u32 = value.parse().ok()?;
+        if (1900..=2200).contains(&year) {
+            return Some(value);
+        }
+    }
+    None
+}
+
 pub fn datetime(value: &str, zone: Option<&str>) -> Option<String> {
     let value = value.trim();
     if value.is_empty() {
         return None;
+    }
+
+    if let Some(partial) = partial_date(value) {
+        return Some(partial.to_string());
     }
 
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
@@ -265,6 +281,9 @@ pub fn date(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() {
         return None;
+    }
+    if let Some(partial) = partial_date(value) {
+        return Some(partial.to_string());
     }
     if let Some(date) = parse_naive_date(value) {
         return Some(date.format("%Y-%m-%d").to_string());
@@ -674,6 +693,15 @@ mod tests {
             datetime("202106011000", Some("UTC")).unwrap(),
             "2021-06-01T10:00:00+00:00"
         );
+    }
+
+    #[test]
+    fn year_only_values_stay_partial() {
+        assert_eq!(date("1985").unwrap(), "1985");
+        assert_eq!(datetime("1985", Some("America/New_York")).unwrap(), "1985");
+        assert!(date("1899").is_none());
+        assert!(date("2201").is_none());
+        assert!(partial_date("198a").is_none());
     }
 
     #[test]

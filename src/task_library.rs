@@ -598,7 +598,9 @@ fn format_date(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Resu
                 Some(date) => Some(date.format(date_format).to_string()),
                 None => {
                     if let Some(value) = value {
-                        unparsed.push(value.to_string());
+                        if crate::fhirutils::builders::partial_date(value).is_none() {
+                            unparsed.push(value.to_string());
+                        }
                     }
                     value.map(|value| value.to_string())
                 }
@@ -1335,6 +1337,19 @@ mod tests {
         )]);
         run(&mut data, "format_date", json!({"columns": ["d"]}));
         assert_eq!(column(&data, "d"), vec![Some("1980-01-02".into()); 6]);
+    }
+
+    #[test]
+    fn format_date_passes_year_only_values_through_silently() {
+        REPORTED_UNPARSED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[
+            ("d", &[Some("1985")]),
+            ("filePath", &[Some("years.csv")]),
+        ]);
+        run(&mut data, "format_date", json!({"columns": ["d"]}));
+        assert_eq!(column(&data, "d"), vec![Some("1985".into())]);
+        let reported = REPORTED_UNPARSED.with(|seen| seen.borrow().len());
+        assert_eq!(reported, 0);
     }
 
     #[test]
