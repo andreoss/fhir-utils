@@ -39,6 +39,8 @@ pub struct FileDefinition {
     pub resource_type: String,
     #[serde(rename = "groupByKey")]
     pub group_by_key: Option<String>,
+    #[serde(rename = "idKey", default, skip_serializing_if = "Option::is_none")]
+    pub id_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skiprows: Option<SkipRows>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +206,7 @@ const KNOWN_TASKS: &[&str] = &[
     "add_constant",
     "add_row_num",
     "append_list",
+    "derive_resource_id",
     "build_object_array",
     "change_case",
     "compare_to_date",
@@ -372,6 +375,7 @@ impl Contract {
             ][..],
             "convert_to_list" => &["column"][..],
             "copy_columns" => &["columns", "target_column"][..],
+            "derive_resource_id" => &["column"][..],
             "filter_to_columns" => &["source_column", "target_columns", "filters"][..],
             "find_not_null_value" => &["columns", "target_column"][..],
             "format_date" => &["columns", "date_format"][..],
@@ -422,6 +426,7 @@ impl Contract {
                 ][..],
                 "convert_to_list" => &["column", "separator"][..],
                 "copy_columns" => &["columns", "target_column", "value_separator"][..],
+                "derive_resource_id" => &["column"][..],
                 "filter_to_columns" => &["source_column", "target_columns", "filters"][..],
                 "find_not_null_value" => &["columns", "target_column"][..],
                 "format_date" => &["columns", "date_format"][..],

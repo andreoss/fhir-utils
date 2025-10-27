@@ -126,6 +126,7 @@ outside that list travels through the pipeline but never reaches the resource.
 | `fileDefinitions.<key>.fileType` | `csv` or `fixed-width` | no
 | `fileDefinitions.<key>.resourceType` | one of the resource keys | yes
 | `fileDefinitions.<key>.groupByKey` | source column that groups the output | yes
+| `fileDefinitions.<key>.idKey` | column whose value derives a stable resource id | no
 | `fileDefinitions.<key>.skiprows` | line count to drop from the top, or zero-based line numbers | no
 | `fileDefinitions.<key>.headers` | column names, names with comments, or names with widths | no
 | `fileDefinitions.<key>.tasks` | ordered tasks appended after the default chain | no
@@ -192,6 +193,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 | `condition_column_with_prerequisite` | + `prerequisite_column`, `prerequisite_match`
 | `convert_to_list` | `column`, `separator` default `,`
 | `copy_columns` | `columns`, `target_column`, `value_separator`
+| `derive_resource_id` | `column`; fills empty `resourceInternalId` with a name-based UUID of it
 | `filter_to_columns` | `source_column`, `target_columns`, `filters`
 | `find_not_null_value` | `columns`, `target_column`
 | `format_date` | `columns`, `date_format`
@@ -234,6 +236,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - Resource ids are generated per run unless the contract maps `resourceInternalId`, so a
   reload creates new ids; the `urn:id:extID` identifier and the `urn:id:source-file-id`
   extension, which carries `<file>:<rowNum>`, stay stable and are the keys to match on.
+- `idKey` names a column whose value is hashed into a name-based UUID that fills an
+  empty `resourceInternalId` after the tasks run, so a reload keeps the same ids.
 - The summary goes to standard output; warnings and errors go to standard error.
 - Warnings print by default; `RUST_LOG=info` adds a line per file naming the definition
   that matched it and, once converted, its row and resource counts.

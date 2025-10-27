@@ -7,7 +7,7 @@ use crate::reader::{ReaderParams, RecordBatch};
 use crate::streaming::ChunkedReader;
 use crate::tasks::{execute_task_chain, TaskRegistry};
 use serde_json::{Map, Value};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Seek};
 use std::path::Path;
 use tracing::warn;
@@ -110,6 +110,12 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
         );
         if let Some(user_tasks) = &self.options.file_def.tasks {
             tasks.extend(user_tasks.clone());
+        }
+        if let Some(id_key) = &self.options.file_def.id_key {
+            tasks.push(crate::contract::Task {
+                task: "derive_resource_id".into(),
+                params: HashMap::from([("column".to_string(), Value::String(id_key.clone()))]),
+            });
         }
         let failures = execute_task_chain(&mut batch, &tasks, self.options.registry);
         for failure in &failures {
@@ -309,6 +315,7 @@ mod tests {
             skiprows: None,
             headers: None,
             tasks: None,
+            id_key: None,
             comment: None,
         }
     }

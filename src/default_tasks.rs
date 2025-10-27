@@ -188,6 +188,7 @@ mod tests {
                 "nameLast".into(),
             ])),
             tasks: None,
+            id_key: None,
             comment: None,
         }
     }

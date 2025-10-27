@@ -568,6 +568,56 @@ mod tests {
     }
 
     #[test]
+    fn an_id_key_makes_resource_ids_stable_across_runs() {
+        let base = TempDir::new().unwrap();
+        fs::create_dir_all(base.path().join("input")).unwrap();
+        fs::create_dir_all(base.path().join("config")).unwrap();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            r#"{
+                "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+                "fileDefinitions": {
+                    "obs": {
+                        "fileType": "csv",
+                        "resourceType": "Observation",
+                        "groupByKey": "mrn",
+                        "idKey": "observationCode"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            base.path().join("input/obs.csv"),
+            "mrn,observationCode\nm1,1234-5\n",
+        )
+        .unwrap();
+
+        let read_ids = |output: &TempDir| -> Vec<String> {
+            let mut ids: Vec<String> = fs::read_dir(output.path().join("m1"))
+                .unwrap()
+                .map(|entry| {
+                    let content = fs::read_to_string(entry.unwrap().path()).unwrap();
+                    let resource: serde_json::Value = serde_json::from_str(&content).unwrap();
+                    resource["id"].as_str().unwrap().to_string()
+                })
+                .collect();
+            ids.sort();
+            ids
+        };
+
+        let first = TempDir::new().unwrap();
+        run_convert(&ConvertRequest::directory(base.path(), first.path())).unwrap();
+        let second = TempDir::new().unwrap();
+        run_convert(&ConvertRequest::directory(base.path(), second.path())).unwrap();
+
+        let ids = read_ids(&first);
+        assert_eq!(ids, read_ids(&second));
+        let expected = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"1234-5").to_string();
+        assert!(ids.contains(&expected), "{ids:?}");
+    }
+
+    #[test]
     fn gzipped_inputs_convert() {
         use std::io::Write as _;
         let base = base_directory();

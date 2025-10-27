@@ -191,6 +191,7 @@ mod tests {
             skiprows: None,
             headers: None,
             tasks: None,
+            id_key: None,
             comment: None,
         }
     }
@@ -214,6 +215,7 @@ mod tests {
                 },
             ])),
             tasks: None,
+            id_key: None,
             comment: None,
         }
     }

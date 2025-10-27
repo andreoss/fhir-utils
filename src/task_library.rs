@@ -29,6 +29,7 @@ const ENTRY_CLASSES: &[(&str, &[&str])] = &[
 ];
 
 pub fn register(registry: &mut TaskRegistry) {
+    registry.register("derive_resource_id", Arc::new(derive_resource_id));
     registry.register("append_list", Arc::new(append_list));
     registry.register("build_object_array", Arc::new(build_object_array));
     registry.register("change_case", Arc::new(change_case));
@@ -200,6 +201,27 @@ fn mapped_value(
         Some(value) => Some(value.to_string()),
         None => fallback.map(|value| value.to_string()),
     }
+}
+
+/// Fills empty `resourceInternalId` cells with a name-based UUID of the given
+/// column, so re-running a load yields the same resource ids.
+fn derive_resource_id(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
+    let column = string_param(params, "derive_resource_id", "column")?;
+    if !batch.columns.contains_key(column) {
+        return Ok(());
+    }
+    let mut values = Vec::with_capacity(batch.row_count);
+    for row in 0..batch.row_count {
+        let current = cell(batch, "resourceInternalId", row).map(|value| value.to_string());
+        values.push(match current {
+            Some(id) if !id.is_empty() => Some(id),
+            _ => cell(batch, column, row).map(|key| {
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, key.as_bytes()).to_string()
+            }),
+        });
+    }
+    set_column(batch, "resourceInternalId", values);
+    Ok(())
 }
 
 fn append_list(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
@@ -1139,6 +1161,31 @@ mod tests {
             json!({"columns": ["a"], "casing": "UPPER LOWER"}),
         );
         assert_eq!(column(&data, "a"), vec![Some("ab".into()), None]);
+    }
+
+    #[test]
+    fn derive_resource_id_fills_empty_ids_deterministically() {
+        let mut data = batch(&[
+            ("mrn", &[Some("m1"), Some("m1"), Some("m2"), None]),
+            (
+                "resourceInternalId",
+                &[None, None, Some("kept"), None],
+            ),
+        ]);
+        run(&mut data, "derive_resource_id", json!({"column": "mrn"}));
+
+        let ids = column(&data, "resourceInternalId");
+        assert_eq!(ids[0], ids[1], "equal keys must derive equal ids");
+        assert_eq!(
+            ids[0].as_deref(),
+            Some(
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"m1")
+                    .to_string()
+                    .as_str()
+            )
+        );
+        assert_eq!(ids[2].as_deref(), Some("kept"));
+        assert_eq!(ids[3], None);
     }
 
     #[test]
