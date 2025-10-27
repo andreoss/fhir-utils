@@ -85,6 +85,7 @@ pub struct ConvertSummary {
     pub rows: usize,
     pub resources: usize,
     pub empty_rows: usize,
+    pub deduplicated: usize,
     pub skipped_files: Vec<String>,
 }
 
@@ -257,6 +258,8 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let mut summary = ConvertSummary::default();
     let mut bundles: std::collections::BTreeMap<String, Vec<Value>> =
         std::collections::BTreeMap::new();
+    let mut seen_ids: std::collections::HashSet<(String, String)> =
+        std::collections::HashSet::new();
 
     for input in inputs {
         let stem = file_stem(&input);
@@ -300,6 +303,20 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 empty.push(row.row_num);
             }
             for resource in row.resources {
+                let resource_type = resource
+                    .get("resourceType")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                let id = resource
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                if !id.is_empty()
+                    && !seen_ids.insert((resource_type.to_string(), id.to_string()))
+                {
+                    summary.deduplicated += 1;
+                    continue;
+                }
                 if request.bundle.is_some() {
                     bundles
                         .entry(row.group_by_key.clone())
@@ -711,6 +728,55 @@ mod tests {
     }
 
     #[test]
+    fn repeated_practitioners_collapse_to_one_resource() {
+        let base = TempDir::new().unwrap();
+        fs::create_dir_all(base.path().join("input")).unwrap();
+        fs::create_dir_all(base.path().join("config")).unwrap();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            r#"{
+                "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+                "fileDefinitions": {
+                    "obs": {
+                        "fileType": "csv",
+                        "resourceType": "Observation",
+                        "groupByKey": "mrn"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            base.path().join("input/obs.csv"),
+            "mrn,observationCode,practitionerInternalId,practitionerNameLast\n\
+             m1,1234-5,doc9,Who\n\
+             m1,5678-9,doc9,Who\n",
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let summary =
+            run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        assert_eq!(summary.deduplicated, 1);
+
+        let mut practitioners = 0;
+        let mut references = std::collections::HashSet::new();
+        for entry in fs::read_dir(output.path().join("m1")).unwrap() {
+            let content = fs::read_to_string(entry.unwrap().path()).unwrap();
+            let resource: serde_json::Value = serde_json::from_str(&content).unwrap();
+            if resource["resourceType"] == json!("Practitioner") {
+                practitioners += 1;
+            }
+            if let Some(performer) = resource["performer"][0]["reference"].as_str() {
+                references.insert(performer.to_string());
+            }
+        }
+        assert_eq!(practitioners, 1);
+        assert_eq!(references.len(), 1);
+        assert!(references.iter().next().unwrap().starts_with("Practitioner/"));
+    }
+
+    #[test]
     fn bundle_mode_writes_one_bundle_per_group_key() {
         let base = base_directory();
         let output = TempDir::new().unwrap();
@@ -950,8 +1016,14 @@ mod tests {
     fn counters_increment_per_resource_type_and_source_file() {
         let base = base_directory();
         fs::write(
+            base.path().join("config/data-contract.json"),
+            CONTRACT.replace("\"Patient\"", "\"Observation\"")
+                .replace("patientInternalId", "mrn"),
+        )
+        .unwrap();
+        fs::write(
             base.path().join("input/patient.csv"),
-            "patientInternalId,nameLast\np1,Smith\np1,Jones\n",
+            "mrn,observationCode\nm1,1234-5\nm1,5678-9\n",
         )
         .unwrap();
         let output = TempDir::new().unwrap();
@@ -961,11 +1033,34 @@ mod tests {
         run_convert(&request).unwrap();
         assert!(output
             .path()
-            .join("p1/p1-Patient-patient-00001.json")
+            .join("m1/m1-Observation-patient-00001.json")
             .is_file());
         assert!(output
             .path()
-            .join("p1/p1-Patient-patient-00002.json")
+            .join("m1/m1-Observation-patient-00002.json")
             .is_file());
+    }
+
+    #[test]
+    fn identical_patient_rows_collapse_to_the_first() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("input/patient.csv"),
+            "patientInternalId,nameLast\np1,Smith\np1,Jones\n",
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let summary =
+            run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        assert_eq!(summary.deduplicated, 1);
+        assert!(output
+            .path()
+            .join("p1/p1-Patient-patient-00001.json")
+            .is_file());
+        assert!(!output
+            .path()
+            .join("p1/p1-Patient-patient-00002.json")
+            .exists());
     }
 }

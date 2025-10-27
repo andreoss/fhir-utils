@@ -244,6 +244,9 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
   characters and `\ : * ? " < > |` become `_`, and an all-dot key becomes `_`.
 - Re-running overwrites matching file names and leaves earlier files in place.
 - The summary counts files, rows read, resources written and rows that produced none.
+- A resource repeating an earlier one's type and id in the same run is collapsed into
+  it and counted in the summary; the first occurrence wins. Generated ids never
+  repeat, so this only affects mapped or `idKey`-derived ids.
 - A row whose record carries no usable code produces no resource; those rows are counted
   in the summary, listed by row number on standard error, and fatal with `--strict`.
 - Resource ids are generated per run unless the contract maps `resourceInternalId`, so a

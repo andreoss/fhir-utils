@@ -123,6 +123,14 @@ fn empty_detail(empty_rows: usize) -> String {
     }
 }
 
+fn deduplicated_detail(deduplicated: usize) -> String {
+    if deduplicated == 0 {
+        String::new()
+    } else {
+        format!(", {deduplicated} duplicate resource(s) collapsed")
+    }
+}
+
 fn skipped_detail(names: &[String]) -> String {
     if names.is_empty() {
         return String::new();
@@ -215,11 +223,12 @@ fn run_conversion(
         bundle,
     })?;
     println!(
-        "Converted {} file(s), read {} row(s), wrote {} resource(s){}, skipped {} file(s){}",
+        "Converted {} file(s), read {} row(s), wrote {} resource(s){}{}, skipped {} file(s){}",
         summary.files,
         summary.rows,
         summary.resources,
         empty_detail(summary.empty_rows),
+        deduplicated_detail(summary.deduplicated),
         summary.skipped(),
         skipped_detail(&summary.skipped_files)
     );
