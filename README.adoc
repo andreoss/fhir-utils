@@ -33,6 +33,7 @@ cargo test                                                   # unit, integration
 | `-c`, `--config-dir` | directory holding the contract | with `-f`, unless `MAPPING_CONFIG_DIRECTORY` is set
 | `-o`, `--output` | output directory, created when missing | yes for `convert`
 | `--strict` | fail on a task error, an empty group key or a row that builds nothing | no
+| `--bundle [<type>]` | one bundle per group key: `collection` (default), `batch`, `transaction` | no
 |===
 
 `-d` and `-f` are mutually exclusive; `-f` without `-c` reads the contract from
@@ -232,6 +233,10 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 == Output
 
 - Path: `<out>/<groupByKey>/<groupByKey>-<resourceType>-<safeFileId>-<nnnnn>.json`.
+- `--bundle` writes `<out>/<groupByKey>/<groupByKey>-Bundle.json` instead: one bundle
+  per group key with `fullUrl` per entry and `meta.lastUpdated`; `batch` and
+  `transaction` entries carry a `PUT` request, which pairs with `idKey` for
+  idempotent reloads.
 - The counter runs per group key, resource type and source file.
 - JSON is pretty printed with sorted keys.
 - `safeFileId` keeps `[A-Za-z0-9-]` and maps every other character to `_`.

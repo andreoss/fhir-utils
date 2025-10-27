@@ -70,6 +70,14 @@ enum Commands {
         output: PathBuf,
         #[arg(long, help = "Fail the run on a task error or an empty group key")]
         strict: bool,
+        #[arg(
+            long,
+            value_name = "TYPE",
+            num_args = 0..=1,
+            default_missing_value = "collection",
+            help = "Write one bundle per group key: collection, batch or transaction"
+        )]
+        bundle: Option<String>,
     },
 }
 
@@ -97,7 +105,8 @@ fn main() {
             config_dir,
             output,
             strict,
-        } => run_conversion(directory, file, config_dir, output, strict),
+            bundle,
+        } => run_conversion(directory, file, config_dir, output, strict, bundle),
     };
 
     if let Err(error) = result {
@@ -170,6 +179,7 @@ fn run_transformation(
             output: PathBuf::new(),
             opener: None,
             strict,
+            bundle: None,
         },
         &mut std::io::stdout(),
     )?;
@@ -189,6 +199,7 @@ fn run_conversion(
     config_dir: Option<PathBuf>,
     output: PathBuf,
     strict: bool,
+    bundle: Option<String>,
 ) -> Result<(), Error> {
     if directory.is_none() && file.is_none() {
         return Err(Error::Config("convert needs -d or -f".into()));
@@ -201,6 +212,7 @@ fn run_conversion(
         output,
         opener: None,
         strict,
+        bundle,
     })?;
     println!(
         "Converted {} file(s), read {} row(s), wrote {} resource(s){}, skipped {} file(s){}",

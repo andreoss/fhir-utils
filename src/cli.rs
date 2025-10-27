@@ -22,6 +22,7 @@ pub struct ConvertRequest {
     pub output: PathBuf,
     pub opener: Option<Arc<dyn Opener>>,
     pub strict: bool,
+    pub bundle: Option<String>,
 }
 
 impl std::fmt::Debug for ConvertRequest {
@@ -69,7 +70,14 @@ impl ConvertRequest {
         self.strict = true;
         self
     }
+
+    pub fn bundled(mut self, bundle_type: impl Into<String>) -> Self {
+        self.bundle = Some(bundle_type.into());
+        self
+    }
 }
+
+const BUNDLE_TYPES: &[&str] = &["collection", "batch", "transaction"];
 
 #[derive(Debug, Default, PartialEq)]
 pub struct ConvertSummary {
@@ -207,6 +215,14 @@ pub fn run_transform(
 }
 
 pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
+    if let Some(bundle_type) = &request.bundle {
+        if !BUNDLE_TYPES.contains(&bundle_type.as_str()) {
+            return Err(Error::Config(format!(
+                "unknown bundle type {bundle_type}; accepted: {}",
+                BUNDLE_TYPES.join(", ")
+            )));
+        }
+    }
     let (inputs, config_dir) = resolve_inputs(request)?;
     let contract = load_contract(request, &config_dir)?;
     let registry = TaskRegistry::new();
@@ -239,6 +255,8 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
 
     let mut counters = Counters::default();
     let mut summary = ConvertSummary::default();
+    let mut bundles: std::collections::BTreeMap<String, Vec<Value>> =
+        std::collections::BTreeMap::new();
 
     for input in inputs {
         let stem = file_stem(&input);
@@ -282,13 +300,20 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 empty.push(row.row_num);
             }
             for resource in row.resources {
-                write_resource(
-                    &*writer,
-                    &request.output,
-                    &row.group_by_key,
-                    &resource,
-                    &mut counters,
-                )?;
+                if request.bundle.is_some() {
+                    bundles
+                        .entry(row.group_by_key.clone())
+                        .or_default()
+                        .push(resource);
+                } else {
+                    write_resource(
+                        &*writer,
+                        &request.output,
+                        &row.group_by_key,
+                        &resource,
+                        &mut counters,
+                    )?;
+                }
                 summary.resources += 1;
             }
         }
@@ -317,7 +342,77 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         );
     }
 
+    if let Some(bundle_type) = &request.bundle {
+        for (group_by_key, resources) in bundles {
+            write_bundle(&*writer, &request.output, &group_by_key, bundle_type, resources)?;
+        }
+    }
+
     Ok(summary)
+}
+
+fn write_bundle(
+    writer: &dyn Opener,
+    output: &Path,
+    group_by_key: &str,
+    bundle_type: &str,
+    resources: Vec<Value>,
+) -> Result<PathBuf, Error> {
+    let segment = safe_segment(group_by_key);
+    let path = output
+        .join(&segment)
+        .join(format!("{segment}-Bundle.json"));
+    let bundle = build_bundle(bundle_type, resources);
+    let write = |path: &Path| -> Result<(), Error> {
+        let mut sink = writer.create(&path.to_string_lossy())?;
+        sink.write_all(format!("{}\n", serde_json::to_string_pretty(&bundle)?).as_bytes())?;
+        sink.flush()?;
+        Ok(())
+    };
+    write(&path).map_err(|error| {
+        Error::Config(format!(
+            "cannot write {} for group key {group_by_key}: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(path)
+}
+
+fn build_bundle(bundle_type: &str, resources: Vec<Value>) -> Value {
+    let entries: Vec<Value> = resources
+        .into_iter()
+        .map(|resource| {
+            let resource_type = resource
+                .get("resourceType")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Resource");
+            let id = resource
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let reference = format!("{resource_type}/{id}");
+            let mut entry = serde_json::Map::new();
+            entry.insert("fullUrl".into(), Value::String(reference.clone()));
+            if bundle_type != "collection" {
+                entry.insert(
+                    "request".into(),
+                    serde_json::json!({"method": "PUT", "url": reference}),
+                );
+            }
+            entry.insert("resource".into(), resource);
+            Value::Object(entry)
+        })
+        .collect();
+    serde_json::json!({
+        "resourceType": "Bundle",
+        "type": bundle_type,
+        "id": uuid::Uuid::new_v4().to_string(),
+        "meta": {
+            "lastUpdated": chrono::Utc::now()
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        },
+        "entry": entries
+    })
 }
 
 fn resolve_inputs(request: &ConvertRequest) -> Result<(Vec<PathBuf>, PathBuf), Error> {
@@ -613,6 +708,59 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn bundle_mode_writes_one_bundle_per_group_key() {
+        let base = base_directory();
+        let output = TempDir::new().unwrap();
+
+        let request =
+            ConvertRequest::directory(base.path(), output.path()).bundled("transaction");
+        let summary = run_convert(&request).unwrap();
+        assert!(summary.resources > 0);
+
+        let content =
+            fs::read_to_string(output.path().join("p1/p1-Bundle.json")).unwrap();
+        let bundle: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(bundle["resourceType"], json!("Bundle"));
+        assert_eq!(bundle["type"], json!("transaction"));
+        assert!(bundle["meta"]["lastUpdated"].is_string());
+        let entry = &bundle["entry"][0];
+        let resource_type = entry["resource"]["resourceType"].as_str().unwrap();
+        let id = entry["resource"]["id"].as_str().unwrap();
+        assert_eq!(entry["fullUrl"], json!(format!("{resource_type}/{id}")));
+        assert_eq!(entry["request"]["method"], json!("PUT"));
+        assert!(output.path().join("p2/p2-Bundle.json").exists());
+
+        let names: Vec<String> = fs::read_dir(output.path().join("p1"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["p1-Bundle.json".to_string()]);
+    }
+
+    #[test]
+    fn a_collection_bundle_has_no_request_entries() {
+        let base = base_directory();
+        let output = TempDir::new().unwrap();
+        let request = ConvertRequest::directory(base.path(), output.path()).bundled("collection");
+        run_convert(&request).unwrap();
+
+        let content = fs::read_to_string(output.path().join("p1/p1-Bundle.json")).unwrap();
+        let bundle: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(bundle["type"], json!("collection"));
+        assert!(bundle["entry"][0].get("request").is_none());
+    }
+
+    #[test]
+    fn an_unknown_bundle_type_is_rejected() {
+        let base = base_directory();
+        let output = TempDir::new().unwrap();
+        let request = ConvertRequest::directory(base.path(), output.path()).bundled("searchset");
+        let error = run_convert(&request).unwrap_err().to_string();
+        assert!(error.contains("searchset"), "{error}");
+        assert!(error.contains("collection"), "{error}");
     }
 
     #[test]
