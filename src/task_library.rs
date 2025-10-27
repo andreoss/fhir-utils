@@ -14,6 +14,8 @@ use std::sync::Arc;
 thread_local! {
     /// File and column pairs already reported as leaving values unmapped.
     static REPORTED_UNMAPPED: RefCell<HashSet<(String, String)>> = RefCell::new(HashSet::new());
+    /// File and column pairs already reported as leaving date values unparsed.
+    static REPORTED_UNPARSED: RefCell<HashSet<(String, String)>> = RefCell::new(HashSet::new());
 }
 
 pub const LIST_SEPARATOR: char = '|';
@@ -589,13 +591,20 @@ fn format_date(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Resu
 
     for column in matched_columns(batch, &columns) {
         let mut values = Vec::with_capacity(batch.row_count);
+        let mut unparsed: Vec<String> = Vec::new();
         for row in 0..batch.row_count {
             let value = cell(batch, &column, row);
             values.push(match value.and_then(parse_date) {
                 Some(date) => Some(date.format(date_format).to_string()),
-                None => value.map(|value| value.to_string()),
+                None => {
+                    if let Some(value) = value {
+                        unparsed.push(value.to_string());
+                    }
+                    value.map(|value| value.to_string())
+                }
             });
         }
+        report_unparsed(batch, &column, unparsed);
         set_column(batch, &column, values);
     }
     Ok(())
@@ -626,20 +635,46 @@ fn map_codes(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result
 }
 
 /// Warns once per file and column about values the code map passes through unchanged.
-fn report_unmapped(batch: &RecordBatch, column: &str, mut unmapped: Vec<String>) {
-    if unmapped.is_empty() {
+fn report_unmapped(batch: &RecordBatch, column: &str, unmapped: Vec<String>) {
+    report_once(
+        &REPORTED_UNMAPPED,
+        batch,
+        column,
+        unmapped,
+        "code map leaves values unchanged",
+    );
+}
+
+/// Warns once per file and column about date values no accepted format parses.
+fn report_unparsed(batch: &RecordBatch, column: &str, unparsed: Vec<String>) {
+    report_once(
+        &REPORTED_UNPARSED,
+        batch,
+        column,
+        unparsed,
+        "format_date leaves values unparsed",
+    );
+}
+
+fn report_once(
+    seen: &'static std::thread::LocalKey<RefCell<HashSet<(String, String)>>>,
+    batch: &RecordBatch,
+    column: &str,
+    mut values: Vec<String>,
+    message: &str,
+) {
+    if values.is_empty() {
         return;
     }
-    unmapped.sort();
-    unmapped.dedup();
+    values.sort();
+    values.dedup();
     let file = cell(batch, "filePath", 0).unwrap_or_default().to_string();
-    let first_time =
-        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().insert((file.clone(), column.to_string())));
+    let first_time = seen.with(|seen| seen.borrow_mut().insert((file.clone(), column.to_string())));
     if !first_time {
         return;
     }
-    let shown: Vec<&str> = unmapped.iter().take(5).map(String::as_str).collect();
-    let rest = unmapped.len().saturating_sub(shown.len());
+    let shown: Vec<&str> = values.iter().take(5).map(String::as_str).collect();
+    let rest = values.len().saturating_sub(shown.len());
     let more = if rest > 0 {
         format!(" and {rest} more")
     } else {
@@ -648,7 +683,7 @@ fn report_unmapped(batch: &RecordBatch, column: &str, mut unmapped: Vec<String>)
     tracing::warn!(
         file = %file,
         column,
-        "code map leaves values unchanged: {}{more}",
+        "{message}: {}{more}",
         shown.join(", ")
     );
 }
@@ -995,7 +1030,7 @@ fn read_secondary(
 #[cfg(test)]
 mod tests {
     use crate::reader::RecordBatch;
-    use crate::task_library::REPORTED_UNMAPPED;
+    use crate::task_library::{REPORTED_UNMAPPED, REPORTED_UNPARSED};
     use crate::tasks::{execute_task_chain, TaskRegistry};
     use serde_json::{json, Value};
     use std::collections::HashMap;
@@ -1283,6 +1318,43 @@ mod tests {
             column(&data, "birthDate"),
             vec![Some("1980-01-02".into()), Some("bad".into()), None]
         );
+    }
+
+    #[test]
+    fn format_date_parses_the_extended_grammar() {
+        let mut data = batch(&[(
+            "d",
+            &[
+                Some("02-Jan-1980"),
+                Some("Jan 2, 1980"),
+                Some("January 2, 1980"),
+                Some("1980.01.02"),
+                Some("1980/01/02"),
+                Some("01-02-1980"),
+            ],
+        )]);
+        run(&mut data, "format_date", json!({"columns": ["d"]}));
+        assert_eq!(column(&data, "d"), vec![Some("1980-01-02".into()); 6]);
+    }
+
+    #[test]
+    fn format_date_reports_unparsed_values_once_per_file_and_column() {
+        REPORTED_UNPARSED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[
+            ("d", &[Some("01/02/1980"), Some("soon")]),
+            ("filePath", &[Some("a.csv"), Some("a.csv")]),
+        ]);
+        run(&mut data, "format_date", json!({"columns": ["d"]}));
+        assert_eq!(
+            column(&data, "d"),
+            vec![Some("1980-01-02".into()), Some("soon".into())]
+        );
+        let reported = REPORTED_UNPARSED.with(|seen| seen.borrow().len());
+        assert_eq!(reported, 1);
+
+        run(&mut data, "format_date", json!({"columns": ["d"]}));
+        let repeated = REPORTED_UNPARSED.with(|seen| seen.borrow().len());
+        assert_eq!(repeated, 1, "a second chunk must not add a second report");
     }
 
     #[test]

@@ -11,15 +11,30 @@ use uuid::Uuid;
 const DEFAULT_CONTENT_TYPE: &str = "text/plain";
 
 const DATE_TIME_FORMATS: &[&str] = &[
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S%.f",
+    "%Y-%m-%d %H:%M:%S%.f",
     "%Y-%m-%dT%H:%M",
     "%Y-%m-%d %H:%M",
     "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y %H:%M",
+    "%m-%d-%Y %H:%M:%S",
+    "%d-%b-%Y %H:%M:%S",
     "%Y%m%d%H%M%S",
+    "%Y%m%d%H%M",
 ];
 
-const DATE_FORMATS: &[&str] = &["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"];
+const DATE_FORMATS: &[&str] = &[
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%Y.%m.%d",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%d-%b-%Y",
+    "%d %b %Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+    "%Y%m%d",
+];
 
 pub fn format_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
@@ -650,9 +665,23 @@ mod tests {
     }
 
     #[test]
+    fn datetime_accepts_fractional_seconds_and_compact_minutes() {
+        assert_eq!(
+            datetime("2021-06-01 10:00:00.500", Some("UTC")).unwrap(),
+            "2021-06-01T10:00:00+00:00"
+        );
+        assert_eq!(
+            datetime("202106011000", Some("UTC")).unwrap(),
+            "2021-06-01T10:00:00+00:00"
+        );
+    }
+
+    #[test]
     fn date_returns_the_calendar_day() {
         assert_eq!(date("2021-06-01 10:00:00").unwrap(), "2021-06-01");
         assert_eq!(date("06/01/2021").unwrap(), "2021-06-01");
+        assert_eq!(date("02-Jan-1980").unwrap(), "1980-01-02");
+        assert_eq!(date("January 2, 1980").unwrap(), "1980-01-02");
         assert!(date("").is_none());
     }
 
