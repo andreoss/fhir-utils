@@ -45,12 +45,16 @@ impl Opener for LocalOpener {
         match scheme(source) {
             None | Some("file") => {
                 let path = self.resolve(source);
+                let resolved = path.to_string_lossy();
+                if let Some(scheme) = scheme(&resolved) {
+                    return open_scheme(scheme, &resolved);
+                }
                 let file = File::open(&path).map_err(|error| {
                     Error::Config(format!("cannot open {}: {error}", path.display()))
                 })?;
                 Ok(Box::new(file))
             }
-            Some(scheme) => Err(unsupported(scheme, source)),
+            Some(scheme) => open_scheme(scheme, source),
         }
     }
 
@@ -139,6 +143,27 @@ impl Opener for MemoryOpener {
             store: self.written.clone(),
         }))
     }
+}
+
+fn open_scheme(scheme: &str, source: &str) -> Result<Box<dyn Source>, Error> {
+    #[cfg(feature = "optimized-streaming")]
+    if matches!(scheme, "http" | "https") {
+        return fetch(source);
+    }
+    Err(unsupported(scheme, source))
+}
+
+#[cfg(feature = "optimized-streaming")]
+fn fetch(source: &str) -> Result<Box<dyn Source>, Error> {
+    let response = ureq::get(source)
+        .call()
+        .map_err(|error| Error::Config(format!("cannot fetch {source}: {error}")))?;
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut bytes)
+        .map_err(|error| Error::Config(format!("cannot fetch {source}: {error}")))?;
+    Ok(Box::new(Cursor::new(bytes)))
 }
 
 fn unsupported(scheme: &str, source: &str) -> Error {
@@ -291,6 +316,40 @@ mod tests {
             Err(error) => error.to_string(),
         };
         assert!(error.contains("cannot decompress"));
+    }
+
+    #[test]
+    fn a_scheme_base_carries_relative_sources_to_the_remote_opener() {
+        let opener = LocalOpener::new("https://host/config");
+        let error = match opener.open("map.csv") {
+            Ok(_) => panic!("a remote base must not open locally"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("https://host/config/map.csv"), "{error}");
+    }
+
+    #[cfg(feature = "optimized-streaming")]
+    #[test]
+    fn http_sources_fetch_over_the_wire() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0u8; 1024];
+            let _ = std::io::Read::read(&mut stream, &mut buffer);
+            let body = "a,b\n1,2\n";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
+        });
+
+        let opener = LocalOpener::new("/base");
+        let mut source = opener.open(&format!("http://{address}/codes.csv")).unwrap();
+        let mut content = String::new();
+        source.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "a,b\n1,2\n");
     }
 
     #[test]

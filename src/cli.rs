@@ -135,7 +135,8 @@ fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
 pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let (inputs, config_dir) = resolve_inputs(request)?;
     let contract_path = config_dir.join(&config().mapping_config_file_name);
-    if !contract_path.exists() {
+    let remote_config = opener::scheme(&config_dir.to_string_lossy()).is_some();
+    if !remote_config && !contract_path.exists() {
         return Err(Error::Config(format!(
             "contract not found: {}",
             contract_path.display()
@@ -147,7 +148,12 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         .clone()
         .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.clone())));
     opener::set_opener(source_opener);
-    let contract = Contract::load(&fs::read_to_string(&contract_path)?)?;
+    let contract_text = if remote_config {
+        opener::read_to_string(&contract_path.to_string_lossy())?
+    } else {
+        fs::read_to_string(&contract_path)?
+    };
+    let contract = Contract::load(&contract_text)?;
     let warnings = contract.lint();
     if request.strict && !warnings.is_empty() {
         return Err(Error::Config(warnings.join("; ")));

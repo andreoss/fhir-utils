@@ -313,3 +313,5 @@ out of the box, other schemes need a backend registered with `opener::set_opener
 opener is scoped to the calling thread, so each worker thread installs its own.
 Output resources are written through the same opener when the output carries a URI
 scheme; a plain path writes to the local filesystem as before.
+The `optimized-streaming` build feature adds `http://` and `https://` sources,
+including a remote contract directory; other schemes still need a registered backend.
