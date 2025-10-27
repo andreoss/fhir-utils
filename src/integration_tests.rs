@@ -88,6 +88,26 @@ mod tests {
     }
 
     #[test]
+    fn test_task_comments_are_accepted() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "patient": {
+                    "fileType": "csv",
+                    "resourceType": "Patient",
+                    "groupByKey": "mrn",
+                    "tasks": [{
+                        "task": "rename_columns",
+                        "column_map": {"MRN": "mrn"},
+                        "comment": "source headers onto record fields"
+                    }]
+                }
+            }
+        }"#;
+        assert!(Contract::load(json).is_ok());
+    }
+
+    #[test]
     fn test_reject_invalid_timezone() {
         let json = read_fixture("invalid_timezone.json");
         let err = Contract::load(&json).unwrap_err();

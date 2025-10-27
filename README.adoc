@@ -205,6 +205,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 |===
 
 - Tasks run in order over one chunk at a time; a failing task is logged and the chain continues.
+- A `comment` key on a task is accepted and ignored.
 - List valued cells are strings joined with `|`.
 - `condition_map` and `code_map` take an inline object or a CSV file with
   `source_value` and `target_value` columns; a `null` or empty target clears the cell.

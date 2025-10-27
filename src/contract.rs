@@ -391,6 +391,9 @@ impl Contract {
         }
 
         for param in params.keys() {
+            if param == "comment" {
+                continue;
+            }
             let known_params = match task_name {
                 "add_constant" => &["name", "value", "discard_if_duplicate"][..],
                 "add_row_num" => &["starting_index"][..],
