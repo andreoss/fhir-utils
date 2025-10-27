@@ -23,6 +23,22 @@ fn validate_accepts_a_valid_contract() {
 }
 
 #[test]
+fn validate_print_round_trips_the_resolved_contract() {
+    let output = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .args(["validate", "--print", "-f"])
+        .arg(fixture("valid.json"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let printed = String::from_utf8(output.stdout).unwrap();
+    let reparsed: serde_json::Value = serde_json::from_str(&printed).unwrap();
+    assert!(reparsed["fileDefinitions"]["patient"].is_object());
+
+    let reloaded = fhir_utils::Contract::load(&printed).unwrap();
+    assert_eq!(reloaded.file_definitions.len(), 2);
+}
+
+#[test]
 fn validate_rejects_an_invalid_timezone() {
     let output = validate("invalid_timezone.json");
     assert!(!output.status.success());

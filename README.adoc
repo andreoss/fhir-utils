@@ -19,6 +19,7 @@ cargo test                                                   # unit, integration
 |===
 | Command | Purpose
 | `fhir-utils validate -f <contract.json>` | validate a data contract
+| `fhir-utils validate --print -f <contract.json>` | print the resolved contract, definitions inlined
 | `fhir-utils convert -d <base> -o <out>` | convert every input under `<base>/input`
 | `fhir-utils convert -f <file> -c <config-dir> -o <out>` | convert one file
 | `fhir-utils transform -d <base>` | print the normalized internal records as JSON lines

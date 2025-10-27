@@ -18,6 +18,8 @@ enum Commands {
     Validate {
         #[arg(short, long, help = "Path to the contract JSON file")]
         file: String,
+        #[arg(long, help = "Print the resolved contract with definitions inlined")]
+        print: bool,
     },
     #[command(about = "Emit the normalized internal records instead of FHIR resources")]
     Transform {
@@ -82,7 +84,7 @@ fn main() {
 
     let cli = Cli::parse();
     let result = match cli.command {
-        Commands::Validate { file } => run_validate(&file),
+        Commands::Validate { file, print } => run_validate(&file, print),
         Commands::Transform {
             directory,
             file,
@@ -125,7 +127,7 @@ fn skipped_detail(names: &[String]) -> String {
     }
 }
 
-fn run_validate(file: &str) -> Result<(), Error> {
+fn run_validate(file: &str, print: bool) -> Result<(), Error> {
     let path = PathBuf::from(file);
     let directory = path
         .parent()
@@ -142,7 +144,11 @@ fn run_validate(file: &str) -> Result<(), Error> {
     for warning in contract.lint() {
         eprintln!("warning: {warning}");
     }
-    println!("Contract is valid");
+    if print {
+        println!("{}", serde_json::to_string_pretty(&contract)?);
+    } else {
+        println!("Contract is valid");
+    }
     Ok(())
 }
 
