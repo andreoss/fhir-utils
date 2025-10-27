@@ -8,7 +8,6 @@ use crate::streaming::ChunkedReader;
 use crate::tasks::{execute_task_chain, TaskRegistry};
 use serde_json::{Map, Value};
 use std::collections::VecDeque;
-use std::fs::File;
 use std::io::{Read, Seek};
 use std::path::Path;
 use tracing::warn;
@@ -241,15 +240,19 @@ pub fn ungrouped_rows(batch: &RecordBatch) -> usize {
 pub fn transform<'a>(
     path: &Path,
     options: ConversionOptions<'a>,
-) -> Result<Transform<'a, File>, Error> {
-    Transform::from_reader(File::open(path)?, options)
+) -> Result<Transform<'a, Box<dyn crate::opener::Source>>, Error> {
+    Transform::from_reader(crate::opener::open_path(path)?, options)
 }
 
 pub fn convert<'a>(
     path: &Path,
     options: ConversionOptions<'a>,
-) -> Result<Convert<'a, File>, Error> {
-    convert_with(File::open(path)?, options, dispatch::convert_record)
+) -> Result<Convert<'a, Box<dyn crate::opener::Source>>, Error> {
+    convert_with(
+        crate::opener::open_path(path)?,
+        options,
+        dispatch::convert_record,
+    )
 }
 
 pub fn convert_with<'a, R: Read + Seek>(

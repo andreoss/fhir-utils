@@ -193,7 +193,24 @@ pub fn opener() -> Arc<dyn Opener> {
 }
 
 pub fn open(source: &str) -> Result<Box<dyn Source>, Error> {
-    opener().open(source)
+    decompressed(source, opener().open(source)?)
+}
+
+pub fn open_path(path: &Path) -> Result<Box<dyn Source>, Error> {
+    let file = File::open(path)?;
+    decompressed(&path.to_string_lossy(), Box::new(file))
+}
+
+/// A `.gz` source is inflated into memory so the reader can seek.
+fn decompressed(source: &str, mut raw: Box<dyn Source>) -> Result<Box<dyn Source>, Error> {
+    if !source.to_ascii_lowercase().ends_with(".gz") {
+        return Ok(raw);
+    }
+    let mut bytes = Vec::new();
+    flate2::read::GzDecoder::new(&mut raw)
+        .read_to_end(&mut bytes)
+        .map_err(|error| Error::Config(format!("cannot decompress {source}: {error}")))?;
+    Ok(Box::new(Cursor::new(bytes)))
 }
 
 pub fn create(target: &str) -> Result<Box<dyn Sink>, Error> {
@@ -246,6 +263,34 @@ mod tests {
         let mut content = String::new();
         source.read_to_string(&mut content).unwrap();
         assert_eq!(content.trim(), "content");
+    }
+
+    #[test]
+    fn gz_sources_are_inflated() {
+        let mut file = tempfile::Builder::new().suffix(".csv.gz").tempfile().unwrap();
+        let mut encoder =
+            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(b"a,b\n1,2\n").unwrap();
+        file.write_all(&encoder.finish().unwrap()).unwrap();
+        file.flush().unwrap();
+
+        let mut source = open_path(file.path()).unwrap();
+        let mut content = String::new();
+        source.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "a,b\n1,2\n");
+    }
+
+    #[test]
+    fn a_broken_gz_source_names_the_file() {
+        let mut file = tempfile::Builder::new().suffix(".gz").tempfile().unwrap();
+        file.write_all(b"not gzip").unwrap();
+        file.flush().unwrap();
+
+        let error = match open_path(file.path()) {
+            Ok(_) => panic!("a broken gz source must not open"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("cannot decompress"));
     }
 
     #[test]

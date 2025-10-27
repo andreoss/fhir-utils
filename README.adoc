@@ -37,6 +37,7 @@ cargo test                                                   # unit, integration
 `MAPPING_CONFIG_DIRECTORY`, and `-d` requires both
 `<base>/input` and `<base>/config`. Exit code `0` on success, `1` on an invalid
 contract, a missing path or a row conversion failure.
+Inputs, code maps and join sources ending in `.gz` are decompressed transparently.
 
 == Quickstart
 

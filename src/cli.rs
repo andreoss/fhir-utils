@@ -562,6 +562,30 @@ mod tests {
     }
 
     #[test]
+    fn gzipped_inputs_convert() {
+        use std::io::Write as _;
+        let base = base_directory();
+        fs::remove_file(base.path().join("input/patient.csv")).unwrap();
+        let mut encoder =
+            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder
+            .write_all(b"patientInternalId,nameLast,nameFirst\np1,Smith,Ann\n")
+            .unwrap();
+        fs::write(
+            base.path().join("input/patient.csv.gz"),
+            encoder.finish().unwrap(),
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let request = ConvertRequest::directory(base.path(), output.path());
+        let summary = run_convert(&request).unwrap();
+        assert_eq!(summary.files, 1);
+        assert!(summary.resources > 0);
+        assert!(output.path().join("p1").is_dir());
+    }
+
+    #[test]
     #[serial]
     fn a_scheme_output_writes_through_the_opener() {
         let base = base_directory();
