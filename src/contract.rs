@@ -40,7 +40,7 @@ pub struct FileDefinition {
     #[serde(rename = "fileType")]
     pub file_type: FileType,
     #[serde(default = "default_delimiter", skip_serializing_if = "is_comma")]
-    pub value_delimiter: char,
+    pub value_delimiter: String,
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub convert_columns_to_string: bool,
     #[serde(rename = "resourceType")]
@@ -59,12 +59,12 @@ pub struct FileDefinition {
     pub comment: Option<String>,
 }
 
-fn default_delimiter() -> char {
-    ','
+fn default_delimiter() -> String {
+    ",".into()
 }
 
-fn is_comma(c: &char) -> bool {
-    *c == ','
+fn is_comma(delimiter: &String) -> bool {
+    delimiter == ","
 }
 
 fn default_true() -> bool {
@@ -360,6 +360,12 @@ impl Contract {
     fn validate_file_definition(&self, matcher: &str, def: &FileDefinition) -> Result<(), Error> {
         if !VALID_RESOURCE_TYPES.contains(&def.resource_type.as_str()) {
             return Err(Error::UnknownResourceType(def.resource_type.clone()));
+        }
+
+        if def.value_delimiter.is_empty() {
+            return Err(Error::Config(format!(
+                "valueDelimiter must not be empty for file matcher: {matcher}"
+            )));
         }
 
         if def.group_by_key.as_deref().unwrap_or("").is_empty() {

@@ -1089,7 +1089,7 @@ fn read_secondary(
 
     let mut params = ReaderParams {
         file_type,
-        value_delimiter: ',',
+        value_delimiter: ",".to_string(),
         skiprows: None,
         headers: None,
         empty_field_values: None,
@@ -1100,9 +1100,9 @@ fn read_secondary(
             .get("valueDelimiter")
             .or_else(|| reader_params.get("sep"))
             .and_then(|value| value.as_str())
-            .and_then(|value| value.chars().next())
+            .filter(|value| !value.is_empty())
         {
-            params.value_delimiter = delimiter;
+            params.value_delimiter = delimiter.to_string();
         }
         if let Some(skiprows) = reader_params.get("skiprows") {
             params.skiprows = serde_json::from_value::<SkipRows>(skiprows.clone()).ok();

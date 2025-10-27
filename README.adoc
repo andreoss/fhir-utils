@@ -143,6 +143,8 @@ outside that list travels through the pipeline but never reaches the resource.
   longest key first, then alphabetically.
 - Fixed-width files need a width form of `headers`; otherwise the first remaining line
   supplies the column names.
+- `valueDelimiter` may be several characters; quoted fields need a one-character
+  delimiter.
 - Input files matching no definition are skipped and named in the summary.
 - Repeated column names keep the last column of the row.
 

@@ -8,7 +8,7 @@ use std::io::{Read, Seek, SeekFrom};
 #[derive(Debug, Clone)]
 pub struct ReaderParams {
     pub file_type: FileType,
-    pub value_delimiter: char,
+    pub value_delimiter: String,
     pub skiprows: Option<SkipRows>,
     pub headers: Option<Headers>,
     pub empty_field_values: Option<Vec<String>>,
@@ -21,7 +21,7 @@ impl ReaderParams {
     ) -> Self {
         Self {
             file_type: def.file_type.clone(),
-            value_delimiter: def.value_delimiter,
+            value_delimiter: def.value_delimiter.clone(),
 
             skiprows: def.skiprows.clone(),
             headers: def.headers.clone(),
@@ -119,9 +119,9 @@ pub(crate) fn resolve_headers<R: Read + Seek>(
             map.entries().iter().map(|(name, _)| name.clone()).collect(),
             None,
         )),
-        None => {
+        None if params.value_delimiter.len() == 1 => {
             let mut csv_reader = ReaderBuilder::new()
-                .delimiter(params.value_delimiter as u8)
+                .delimiter(params.value_delimiter.as_bytes()[0])
                 .has_headers(false)
                 .flexible(true)
                 .from_reader(&mut *reader);
@@ -134,6 +134,27 @@ pub(crate) fn resolve_headers<R: Read + Seek>(
                 let record = record?;
                 header = Some((
                     record.iter().map(|value| value.to_string()).collect(),
+                    Some(index),
+                ));
+                break;
+            }
+            reader.seek(SeekFrom::Start(0))?;
+            Ok(header.unwrap_or_else(|| (Vec::new(), None)))
+        }
+        None => {
+            let mut header = None;
+            for (index, line) in std::io::BufRead::lines(std::io::BufReader::new(&mut *reader))
+                .enumerate()
+            {
+                if skip_rows.contains(&index) {
+                    continue;
+                }
+                let line = line?;
+                header = Some((
+                    line.trim_end_matches('\r')
+                        .split(params.value_delimiter.as_str())
+                        .map(|value| value.to_string())
+                        .collect(),
                     Some(index),
                 ));
                 break;
@@ -185,7 +206,7 @@ mod tests {
     fn make_csv_def() -> FileDefinition {
         FileDefinition {
             file_type: FileType::Csv,
-            value_delimiter: ',',
+            value_delimiter: ",".into(),
             convert_columns_to_string: true,
             resource_type: "Patient".into(),
             group_by_key: Some("patientInternalId".into()),
@@ -200,7 +221,7 @@ mod tests {
     fn make_fixed_width_def() -> FileDefinition {
         FileDefinition {
             file_type: FileType::FixedWidth,
-            value_delimiter: ',',
+            value_delimiter: ",".into(),
             convert_columns_to_string: true,
             resource_type: "Encounter".into(),
             group_by_key: Some("encounterNumber".into()),
@@ -434,6 +455,27 @@ mod tests {
         assert_eq!(
             batch.get_column("field2").unwrap(),
             &vec![Some("abcdefghij".into())]
+        );
+    }
+
+    #[test]
+    fn test_multi_character_delimiters_split_columns() {
+        let data = "a||b||c\n1||2||3\n4||5||6\n";
+        let mut cursor = Cursor::new(data);
+        let general = make_general();
+        let mut def = make_csv_def();
+        def.value_delimiter = "||".into();
+        let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
+
+        let batch = read_delimited(&mut cursor, &params).unwrap();
+        assert_eq!(batch.row_count, 2);
+        assert_eq!(
+            batch.get_column("a").unwrap(),
+            &vec![Some("1".into()), Some("4".into())]
+        );
+        assert_eq!(
+            batch.get_column("c").unwrap(),
+            &vec![Some("3".into()), Some("6".into())]
         );
     }
 

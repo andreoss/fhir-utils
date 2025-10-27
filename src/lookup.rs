@@ -54,7 +54,7 @@ mod tests {
             "patient".into(),
             FileDefinition {
                 file_type: FileType::Csv,
-                value_delimiter: ',',
+                value_delimiter: ",".into(),
                 convert_columns_to_string: true,
                 resource_type: "Patient".into(),
                 group_by_key: Some("patientInternalId".into()),
@@ -69,7 +69,7 @@ mod tests {
             "encounter".into(),
             FileDefinition {
                 file_type: FileType::Csv,
-                value_delimiter: ',',
+                value_delimiter: ",".into(),
                 convert_columns_to_string: true,
                 resource_type: "Encounter".into(),
                 group_by_key: Some("encounterNumber".into()),
@@ -121,7 +121,7 @@ mod tests {
             r"patient_\d{4}\.csv".into(),
             FileDefinition {
                 file_type: FileType::Csv,
-                value_delimiter: ',',
+                value_delimiter: ",".into(),
                 convert_columns_to_string: true,
                 resource_type: "Patient".into(),
                 group_by_key: Some("patientInternalId".into()),
@@ -145,7 +145,7 @@ mod tests {
             r"patient_\d{4}\.csv".into(),
             FileDefinition {
                 file_type: FileType::Csv,
-                value_delimiter: ',',
+                value_delimiter: ",".into(),
                 convert_columns_to_string: true,
                 resource_type: "Patient".into(),
                 group_by_key: Some("patientInternalId".into()),
@@ -168,7 +168,7 @@ mod tests {
             "patient_encounter".into(),
             FileDefinition {
                 file_type: FileType::Csv,
-                value_delimiter: ',',
+                value_delimiter: ",".into(),
                 convert_columns_to_string: true,
                 resource_type: "Condition".into(),
                 group_by_key: Some("patientInternalId".into()),

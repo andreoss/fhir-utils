@@ -14,6 +14,7 @@ pub struct Chunk {
 
 enum Source<R: Read + Seek> {
     Delimited(Box<Reader<R>>),
+    Split(BufReader<R>),
     FixedWidth(BufReader<R>),
 }
 
@@ -43,17 +44,17 @@ impl<R: Read + Seek> ChunkedReader<R> {
             FileType::Csv => {
                 let (headers, header_row) = resolve_headers(&mut reader, &params, &skip_rows)?;
                 reader.seek(SeekFrom::Start(0))?;
-                let csv_reader = ReaderBuilder::new()
-                    .delimiter(params.value_delimiter as u8)
-                    .has_headers(false)
-                    .flexible(true)
-                    .from_reader(reader);
-                (
-                    Source::Delimited(Box::new(csv_reader)),
-                    headers,
-                    Vec::new(),
-                    header_row,
-                )
+                let source = if params.value_delimiter.len() == 1 {
+                    let csv_reader = ReaderBuilder::new()
+                        .delimiter(params.value_delimiter.as_bytes()[0])
+                        .has_headers(false)
+                        .flexible(true)
+                        .from_reader(reader);
+                    Source::Delimited(Box::new(csv_reader))
+                } else {
+                    Source::Split(BufReader::new(reader))
+                };
+                (source, headers, Vec::new(), header_row)
             }
             FileType::FixedWidth => {
                 let widths = resolve_fixed_width_headers(&params.headers)?;
@@ -125,6 +126,32 @@ impl<R: Read + Seek> ChunkedReader<R> {
                     batch.add_row(row);
                     *row_index += 1;
                     rows_read += 1;
+
+                    if rows_read >= *buffer_size {
+                        break;
+                    }
+                }
+            }
+            Source::Split(reader) => {
+                let mut line = String::new();
+                while reader.read_line(&mut line)? > 0 {
+                    let trimmed = line.trim_end_matches('\n').trim_end_matches('\r');
+
+                    if Some(*row_index) == *header_row || skip_rows.contains(row_index) {
+                        *row_index += 1;
+                        line.clear();
+                        continue;
+                    }
+
+                    let mut row = HashMap::new();
+                    let mut values = trimmed.split(params.value_delimiter.as_str());
+                    for header in headers.iter() {
+                        row.insert(header.clone(), normalize(values.next(), params));
+                    }
+                    batch.add_row(row);
+                    *row_index += 1;
+                    rows_read += 1;
+                    line.clear();
 
                     if rows_read >= *buffer_size {
                         break;
@@ -226,7 +253,7 @@ mod tests {
     fn csv_def() -> FileDefinition {
         FileDefinition {
             file_type: FileType::Csv,
-            value_delimiter: ',',
+            value_delimiter: ",".into(),
             convert_columns_to_string: true,
             resource_type: "Patient".into(),
             group_by_key: Some("a".into()),

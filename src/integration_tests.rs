@@ -36,7 +36,7 @@ mod tests {
         let contract = Contract::load(&read_fixture("valid.json")).unwrap();
 
         let patient = contract.file_definitions.get("patient").unwrap();
-        assert_eq!(patient.value_delimiter, ',');
+        assert_eq!(patient.value_delimiter, ",");
         assert!(patient.convert_columns_to_string);
         assert_eq!(patient.resource_type, "Patient");
         assert_eq!(patient.group_by_key.as_deref(), Some("patientInternalId"));
@@ -49,7 +49,7 @@ mod tests {
         ));
 
         let encounter = contract.file_definitions.get("encounter").unwrap();
-        assert_eq!(encounter.value_delimiter, ',');
+        assert_eq!(encounter.value_delimiter, ",");
         assert!(encounter.convert_columns_to_string);
         assert!(encounter.skiprows.is_none());
         assert!(encounter.tasks.is_none());

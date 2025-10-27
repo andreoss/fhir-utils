@@ -309,7 +309,7 @@ mod tests {
     fn file_def() -> FileDefinition {
         FileDefinition {
             file_type: FileType::Csv,
-            value_delimiter: ',',
+            value_delimiter: ",".into(),
             convert_columns_to_string: true,
             resource_type: "Patient".into(),
             group_by_key: Some("a".into()),
