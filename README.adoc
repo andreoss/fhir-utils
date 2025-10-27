@@ -145,6 +145,7 @@ outside that list travels through the pipeline but never reaches the resource.
 `Location`, `Organization`, `Practitioner`, `Procedure`, `MedicationUse`,
 `MedicationAdministration`, `MedicationRequest`, `MedicationStatement`,
 `DocumentReference`, `DiagnosticReport`, `Unstructured`, `Basic`.
+Keys match regardless of case; `patient` reads as `Patient`.
 
 == Record fields
 

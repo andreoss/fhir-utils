@@ -143,6 +143,34 @@ mod tests {
     }
 
     #[test]
+    fn test_resource_type_case_is_canonicalized() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "patient": {
+                    "fileType": "csv",
+                    "resourceType": "patient",
+                    "groupByKey": "mrn"
+                },
+                "meds": {
+                    "fileType": "csv",
+                    "resourceType": "MEDICATIONUSE",
+                    "groupByKey": "mrn"
+                }
+            }
+        }"#;
+        let contract = Contract::load(json).unwrap();
+        assert_eq!(
+            contract.file_definitions.get("patient").unwrap().resource_type,
+            "Patient"
+        );
+        assert_eq!(
+            contract.file_definitions.get("meds").unwrap().resource_type,
+            "MedicationUse"
+        );
+    }
+
+    #[test]
     fn test_reject_unknown_resource_type() {
         let json = read_fixture("unknown_resource_type.json");
         let err = Contract::load(&json).unwrap_err();

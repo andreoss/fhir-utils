@@ -266,7 +266,14 @@ impl Contract {
             serde_json::from_str(without_bom(json)).map_err(|error| explain(&error.to_string()))?;
         let mut file_definitions = HashMap::new();
         for (matcher, definition) in raw.file_definitions {
-            file_definitions.insert(matcher, resolve_definition(definition)?);
+            let mut definition = resolve_definition(definition)?;
+            if let Some(canonical) = VALID_RESOURCE_TYPES
+                .iter()
+                .find(|key| key.eq_ignore_ascii_case(&definition.resource_type))
+            {
+                definition.resource_type = canonical.to_string();
+            }
+            file_definitions.insert(matcher, definition);
         }
 
         let contract = Contract {
