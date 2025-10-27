@@ -71,9 +71,17 @@ pub const IDENTIFIER_TYPE_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/
 pub const IDENTIFIER_TYPE_SYSTEM_RXN: &str = "urn:id:identifier-type";
 pub const EXT_ID_SYSTEM: &str = "urn:id:extID";
 
+pub const ATC_SYSTEM: &str = "http://www.whocc.no/atc";
+pub const CDT_SYSTEM: &str = "http://www.ada.org/cdt";
+pub const HCPCS_SYSTEM: &str = "http://terminology.hl7.org/CodeSystem/HCPCS";
+pub const UCUM_SYSTEM: &str = "http://unitsofmeasure.org";
+
 pub const CODE_SYSTEMS: &[(&str, &str)] = &[
+    ("ATC", ATC_SYSTEM),
+    ("CDT", CDT_SYSTEM),
     ("CPT", CPT_SYSTEM),
     ("CVX", CVX_SYSTEM),
+    ("HCPCS", HCPCS_SYSTEM),
     ("ICD9", ICD9_SYSTEM),
     ("ICD10", ICD10_SYSTEM),
     ("ICD10PCS", ICD10PCS_SYSTEM),
@@ -83,8 +91,36 @@ pub const CODE_SYSTEMS: &[(&str, &str)] = &[
     ("NDC", NDC_SYSTEM),
     ("RXNORM", RXNORM_SYSTEM),
     ("SNOMED", SNOMED_SYSTEM),
+    ("UCUM", UCUM_SYSTEM),
     ("UMLS", UMLS_SYSTEM),
 ];
+
+/// Alternate spellings accepted on input; reverse lookups keep the canonical name.
+pub const CODE_SYSTEM_ALIASES: &[(&str, &str)] = &[
+    ("ICD9CM", ICD9_SYSTEM),
+    ("ICD10CM", ICD10_SYSTEM),
+    ("SCT", SNOMED_SYSTEM),
+    ("SNOMEDCT", SNOMED_SYSTEM),
+];
+
+thread_local! {
+    /// Contract-supplied code system names, consulted before the built-in table.
+    static CUSTOM_CODE_SYSTEMS: std::cell::RefCell<Vec<(String, String)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+pub fn set_code_systems(entries: Vec<(String, String)>) {
+    CUSTOM_CODE_SYSTEMS.with(|slot| *slot.borrow_mut() = entries);
+}
+
+pub fn custom_system_url(short_name: &str) -> Option<String> {
+    CUSTOM_CODE_SYSTEMS.with(|slot| {
+        slot.borrow()
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(short_name))
+            .map(|(_, url)| url.clone())
+    })
+}
 
 pub const RACE_DISPLAY: &[(&str, &str)] = &[
     ("1002-5", "American Indian or Alaska Native"),
@@ -271,7 +307,8 @@ pub fn display(table: &[(&str, &'static str)], code: &str) -> Option<&'static st
 pub fn system_url(short_name: &str) -> Option<&'static str> {
     CODE_SYSTEMS
         .iter()
-        .find(|(name, _)| *name == short_name)
+        .chain(CODE_SYSTEM_ALIASES)
+        .find(|(name, _)| name.eq_ignore_ascii_case(short_name))
         .map(|(_, url)| *url)
 }
 

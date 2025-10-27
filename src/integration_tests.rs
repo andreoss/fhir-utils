@@ -109,6 +109,70 @@ mod tests {
     }
 
     #[test]
+    fn test_inline_code_systems_extend_the_url_table() {
+        let json = r#"{
+            "general": {
+                "timeZone": "UTC", "tenantId": "t1", "streamType": "live",
+                "codeSystems": {"LOCALLAB": "http://example.org/lab-codes"}
+            },
+            "fileDefinitions": {
+                "p": {"fileType": "csv", "resourceType": "Patient", "groupByKey": "mrn"}
+            }
+        }"#;
+        Contract::load(json).unwrap();
+        assert_eq!(
+            crate::fhirutils::builders::code_system("locallab").as_deref(),
+            Some("http://example.org/lab-codes")
+        );
+        assert_eq!(
+            crate::fhirutils::builders::code_system("LOINC").as_deref(),
+            Some("http://loinc.org")
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_code_systems_load_from_a_file_through_the_opener() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![(
+            "systems.json".into(),
+            b"{\"WARD\": \"http://example.org/wards\"}".to_vec(),
+        )])));
+
+        let json = r#"{
+            "general": {
+                "timeZone": "UTC", "tenantId": "t1", "streamType": "live",
+                "codeSystems": "systems.json"
+            },
+            "fileDefinitions": {
+                "p": {"fileType": "csv", "resourceType": "Patient", "groupByKey": "mrn"}
+            }
+        }"#;
+        Contract::load(json).unwrap();
+        assert_eq!(
+            crate::fhirutils::builders::code_system("ward").as_deref(),
+            Some("http://example.org/wards")
+        );
+
+        crate::opener::set_opener(previous);
+    }
+
+    #[test]
+    fn test_code_systems_reject_non_string_urls() {
+        let json = r#"{
+            "general": {
+                "timeZone": "UTC", "tenantId": "t1", "streamType": "live",
+                "codeSystems": {"WARD": 5}
+            },
+            "fileDefinitions": {
+                "p": {"fileType": "csv", "resourceType": "Patient", "groupByKey": "mrn"}
+            }
+        }"#;
+        let error = Contract::load(json).unwrap_err().to_string();
+        assert!(error.contains("codeSystems.WARD"), "{error}");
+    }
+
+    #[test]
     fn test_task_comments_are_accepted() {
         let json = r#"{
             "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},

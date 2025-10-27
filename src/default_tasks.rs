@@ -170,6 +170,7 @@ mod tests {
             assigning_authority: Some("1.2.3.4.5".into()),
             empty_field_values: Some(vec!["".into(), "NA".into(), "N/A".into(), "null".into()]),
             regex_filenames: false,
+            code_systems: None,
             extra: Default::default(),
         }
     }

@@ -89,6 +89,7 @@ mod tests {
                 assigning_authority: None,
                 empty_field_values: None,
                 regex_filenames,
+                code_systems: None,
                 extra: Default::default(),
             },
             file_definitions,

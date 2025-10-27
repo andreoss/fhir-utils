@@ -123,6 +123,7 @@ outside that list travels through the pipeline but never reaches the resource.
 | `general.assigningAuthority` | identifier system for PI, MR, AN, VN, RI, RXN | no
 | `general.emptyFieldValues` | values read as null | no
 | `general.regexFilenames` | match file definition keys as regular expressions | no
+| `general.codeSystems` | code system names to canonical URLs: object or JSON file name | no
 | `fileDefinitions.<key>.fileType` | `csv` or `fixed-width` | no
 | `fileDefinitions.<key>.resourceType` | one of the resource keys | yes
 | `fileDefinitions.<key>.groupByKey` | source column that groups the output | yes
@@ -263,6 +264,15 @@ Ambiguous numeric forms read month first.
   for date fields and keeps its precision.
 - Naive datetimes are localized with `general.timeZone`; an offset embedded in the
   value wins over the contract zone.
+
+== Code systems
+
+- Short system names render as canonical URLs: `ICD9`, `ICD10`, `ICD10PCS`, `LOINC`,
+  `SNOMED`, `CPT`, `CVX`, `NDC`, `RXNORM`, `MESH`, `NCI`, `UMLS`, `HCPCS`, `ATC`,
+  `CDT`, `UCUM`; matching ignores case and common alternate spellings.
+- `general.codeSystems` adds or overrides entries: an inline object of name to URL,
+  or the name of a JSON file resolved through the pluggable opener.
+- A name outside the table renders as `urn:id:<value>`; full URIs pass through.
 
 == Required field defaults
 

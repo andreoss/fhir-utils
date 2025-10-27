@@ -17,6 +17,14 @@ pub struct General {
     pub empty_field_values: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub regex_filenames: bool,
+    /// Code system names mapped to canonical URLs: an inline object or the name
+    /// of a JSON file opened through the pluggable opener. Not a row constant.
+    #[serde(
+        rename = "codeSystems",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub code_systems: Option<serde_json::Value>,
     /// Any further key of the general block, injected as a row constant.
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -202,6 +210,31 @@ pub fn without_bom(text: &str) -> &str {
     text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
+fn resolve_code_systems(value: Option<&serde_json::Value>) -> Result<Vec<(String, String)>, Error> {
+    let value = match value {
+        None => return Ok(Vec::new()),
+        Some(serde_json::Value::String(source)) => {
+            let content = crate::opener::read_to_string(source)?;
+            serde_json::from_str(without_bom(&content)).map_err(|error| {
+                Error::Config(format!("codeSystems file {source} is not valid JSON: {error}"))
+            })?
+        }
+        Some(value) => value.clone(),
+    };
+    let entries = value.as_object().ok_or_else(|| {
+        Error::Config("codeSystems must be an object of name to URL, or a file name".into())
+    })?;
+    entries
+        .iter()
+        .map(|(name, url)| match url.as_str() {
+            Some(url) => Ok((name.clone(), url.to_string())),
+            None => Err(Error::Config(format!(
+                "codeSystems.{name} must be a URL string"
+            ))),
+        })
+        .collect()
+}
+
 const KNOWN_TASKS: &[&str] = &[
     "add_constant",
     "add_row_num",
@@ -284,6 +317,9 @@ impl Contract {
             file_definitions,
         };
         contract.validate()?;
+        crate::fhirutils::constants::set_code_systems(resolve_code_systems(
+            contract.general.code_systems.as_ref(),
+        )?);
         if contract.file_definitions.is_empty() {
             return Err(Error::Config(
                 "fileDefinitions is required and must name at least one file".into(),

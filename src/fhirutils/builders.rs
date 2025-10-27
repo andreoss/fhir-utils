@@ -102,6 +102,9 @@ pub fn code_system(value: &str) -> Option<String> {
     if value.is_empty() {
         return None;
     }
+    if let Some(url) = constants::custom_system_url(value) {
+        return Some(url);
+    }
     match constants::system_url(value) {
         Some(url) => Some(url.to_string()),
         None => uri_format(value),
@@ -729,6 +732,17 @@ mod tests {
             datetime("202106011000", Some("UTC")).unwrap(),
             "2021-06-01T10:00:00+00:00"
         );
+    }
+
+    #[test]
+    fn code_systems_match_regardless_of_case() {
+        assert_eq!(
+            code_system("icd10").unwrap(),
+            "http://hl7.org/fhir/sid/icd-10-cm"
+        );
+        assert_eq!(code_system("snomedct").unwrap(), "http://snomed.info/sct");
+        assert_eq!(code_system("UCUM").unwrap(), "http://unitsofmeasure.org");
+        assert_eq!(code_system("unlisted").unwrap(), "urn:id:unlisted");
     }
 
     #[test]
