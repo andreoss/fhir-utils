@@ -94,7 +94,7 @@ fn read_all<R: Read + Seek>(reader: &mut R, params: &ReaderParams) -> Result<Rec
 
 pub(crate) fn resolve_skip_rows(skiprows: &Option<SkipRows>) -> Result<Vec<usize>, Error> {
     match skiprows {
-        Some(SkipRows::Single(n)) => Ok(vec![*n]),
+        Some(SkipRows::Single(n)) => Ok((0..*n).collect()),
         Some(SkipRows::Multiple(v)) => Ok(v.clone()),
         None => Ok(vec![]),
     }
@@ -251,7 +251,7 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let general = make_general();
         let mut def = make_csv_def();
-        def.skiprows = Some(SkipRows::Single(0));
+        def.skiprows = Some(SkipRows::Single(1));
         def.headers = Some(Headers::List(vec![
             "col1".into(),
             "col2".into(),
@@ -261,6 +261,28 @@ mod tests {
 
         let batch = read_delimited(&mut cursor, &params).unwrap();
         assert_eq!(batch.row_count, 2);
+    }
+
+    #[test]
+    fn test_skiprows_integer_skips_the_first_n_lines() {
+        let data = "junk1\njunk2\n1,2,3\n4,5,6\n";
+        let mut cursor = Cursor::new(data);
+        let general = make_general();
+        let mut def = make_csv_def();
+        def.skiprows = Some(SkipRows::Single(2));
+        def.headers = Some(Headers::List(vec![
+            "col1".into(),
+            "col2".into(),
+            "col3".into(),
+        ]));
+        let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
+
+        let batch = read_delimited(&mut cursor, &params).unwrap();
+        assert_eq!(batch.row_count, 2);
+        assert_eq!(
+            batch.get_column("col1").unwrap(),
+            &vec![Some("1".into()), Some("4".into())]
+        );
     }
 
     #[test]
@@ -355,7 +377,7 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let general = make_general();
         let mut def = make_fixed_width_def();
-        def.skiprows = Some(SkipRows::Single(0));
+        def.skiprows = Some(SkipRows::Single(1));
         let params = ReaderParams::from_file_definition(&def, general.empty_field_values.as_ref());
 
         let batch = read_fixed_width(&mut cursor, &params).unwrap();

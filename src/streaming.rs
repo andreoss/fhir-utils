@@ -314,7 +314,7 @@ mod tests {
     fn skiprows_runs_before_the_header_is_inferred() {
         let data = "# nightly export\na,b\n1,2\n3,4\n";
         let mut def = csv_def();
-        def.skiprows = Some(SkipRows::Single(0));
+        def.skiprows = Some(SkipRows::Single(1));
         let p = params(&def, &general());
         let mut reader = ChunkedReader::new(Cursor::new(data), p, 10).unwrap();
 

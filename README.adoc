@@ -125,7 +125,7 @@ outside that list travels through the pipeline but never reaches the resource.
 | `fileDefinitions.<key>.fileType` | `csv` or `fixed-width` | no
 | `fileDefinitions.<key>.resourceType` | one of the resource keys | yes
 | `fileDefinitions.<key>.groupByKey` | source column that groups the output | yes
-| `fileDefinitions.<key>.skiprows` | zero-based line numbers dropped before the header | no
+| `fileDefinitions.<key>.skiprows` | line count to drop from the top, or zero-based line numbers | no
 | `fileDefinitions.<key>.headers` | column names, or names with widths | no
 | `fileDefinitions.<key>.tasks` | ordered tasks appended after the default chain | no
 |===

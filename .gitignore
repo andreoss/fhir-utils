@@ -2,3 +2,4 @@ target/
 /doc/
 /.opencode/
 Cargo.lock
+/references/
