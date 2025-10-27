@@ -310,3 +310,5 @@ Settings are read once per process. Contracts, external file definitions, mappin
 and join sources open through one pluggable opener: local paths and `file://` URIs work
 out of the box, other schemes need a backend registered with `opener::set_opener`. The
 opener is scoped to the calling thread, so each worker thread installs its own.
+Output resources are written through the same opener when the output carries a URI
+scheme; a plain path writes to the local filesystem as before.

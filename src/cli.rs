@@ -9,6 +9,7 @@ use crate::tasks::TaskRegistry;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -156,23 +157,30 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     }
     let registry = TaskRegistry::new();
     let output = &request.output;
-    fs::create_dir_all(output).map_err(|error| {
-        Error::Config(format!(
-            "cannot create output directory {}: {error}",
-            output.display()
-        ))
-    })?;
-    let mut entries = fs::read_dir(output).map_err(|error| {
-        Error::Config(format!(
-            "cannot read output directory {}: {error}",
-            output.display()
-        ))
-    })?;
-    if entries.next().is_some() {
-        info!(
-            output = %request.output.display(),
-            "output directory is not empty; files from earlier runs are left in place"
-        );
+    let writer: Arc<dyn Opener> = if opener::scheme(&output.to_string_lossy()).is_some() {
+        opener::opener()
+    } else {
+        Arc::new(LocalOpener::new("."))
+    };
+    if opener::scheme(&output.to_string_lossy()).is_none() {
+        fs::create_dir_all(output).map_err(|error| {
+            Error::Config(format!(
+                "cannot create output directory {}: {error}",
+                output.display()
+            ))
+        })?;
+        let mut entries = fs::read_dir(output).map_err(|error| {
+            Error::Config(format!(
+                "cannot read output directory {}: {error}",
+                output.display()
+            ))
+        })?;
+        if entries.next().is_some() {
+            info!(
+                output = %request.output.display(),
+                "output directory is not empty; files from earlier runs are left in place"
+            );
+        }
     }
 
     let mut counters = Counters::default();
@@ -220,7 +228,13 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 empty.push(row.row_num);
             }
             for resource in row.resources {
-                write_resource(&request.output, &row.group_by_key, &resource, &mut counters)?;
+                write_resource(
+                    &*writer,
+                    &request.output,
+                    &row.group_by_key,
+                    &resource,
+                    &mut counters,
+                )?;
                 summary.resources += 1;
             }
         }
@@ -362,6 +376,7 @@ pub fn safe_segment(value: &str) -> String {
 }
 
 fn write_resource(
+    writer: &dyn Opener,
     output: &Path,
     group_by_key: &str,
     resource: &Value,
@@ -375,22 +390,16 @@ fn write_resource(
     let count = counters.next(group_by_key, &format!("{resource_type}-{file_id}"));
 
     let segment = safe_segment(group_by_key);
-    let directory = output.join(&segment);
-    fs::create_dir_all(&directory).map_err(|error| {
-        Error::Config(format!(
-            "cannot create {} for group key {group_by_key}: {error}",
-            directory.display()
-        ))
-    })?;
-
-    let path = directory.join(format!(
+    let path = output.join(&segment).join(format!(
         "{segment}-{resource_type}-{file_id}-{count:05}.json"
     ));
-    fs::write(
-        &path,
-        format!("{}\n", serde_json::to_string_pretty(resource)?),
-    )
-    .map_err(|error| {
+    let write = |path: &Path| -> Result<(), Error> {
+        let mut sink = writer.create(&path.to_string_lossy())?;
+        sink.write_all(format!("{}\n", serde_json::to_string_pretty(resource)?).as_bytes())?;
+        sink.flush()?;
+        Ok(())
+    };
+    write(&path).map_err(|error| {
         Error::Config(format!(
             "cannot write {} for group key {group_by_key}: {error}",
             path.display()
@@ -550,6 +559,27 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    #[serial]
+    fn a_scheme_output_writes_through_the_opener() {
+        let base = base_directory();
+        let memory = Arc::new(crate::opener::MemoryOpener::new(Vec::new()));
+
+        let request = ConvertRequest::directory(base.path(), Path::new("mem://out"))
+            .with_opener(memory.clone());
+        let summary = run_convert(&request).unwrap();
+        assert!(summary.resources > 0);
+
+        let written = memory.written();
+        assert_eq!(written.len(), summary.resources);
+        assert!(written
+            .iter()
+            .all(|(name, _)| name.starts_with("mem://out/")));
+        let (_, content) = &written[0];
+        let resource: serde_json::Value = serde_json::from_slice(content).unwrap();
+        assert!(resource.get("resourceType").is_some());
     }
 
     #[test]

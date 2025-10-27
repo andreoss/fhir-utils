@@ -1,15 +1,24 @@
 use crate::error::Error;
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub trait Source: Read + Seek + Send {}
 impl<T: Read + Seek + Send> Source for T {}
 
+type WrittenStore = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
+pub trait Sink: Write + Send {}
+impl<T: Write + Send> Sink for T {}
+
 pub trait Opener: Send + Sync {
     fn open(&self, source: &str) -> Result<Box<dyn Source>, Error>;
+
+    fn create(&self, target: &str) -> Result<Box<dyn Sink>, Error> {
+        Err(Error::Config(format!("this opener cannot write: {target}")))
+    }
 }
 
 pub struct LocalOpener {
@@ -44,15 +53,73 @@ impl Opener for LocalOpener {
             Some(scheme) => Err(unsupported(scheme, source)),
         }
     }
+
+    /// Writes resolve as given, so a relative output stays relative to the run.
+    fn create(&self, target: &str) -> Result<Box<dyn Sink>, Error> {
+        match scheme(target) {
+            None | Some("file") => {
+                let path = Path::new(strip_file_scheme(target));
+                if let Some(parent) = path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        std::fs::create_dir_all(parent).map_err(|error| {
+                            Error::Config(format!(
+                                "cannot create {}: {error}",
+                                parent.display()
+                            ))
+                        })?;
+                    }
+                }
+                let file = File::create(path).map_err(|error| {
+                    Error::Config(format!("cannot create {}: {error}", path.display()))
+                })?;
+                Ok(Box::new(file))
+            }
+            Some(scheme) => Err(unsupported(scheme, target)),
+        }
+    }
 }
 
 pub struct MemoryOpener {
     entries: Vec<(String, Vec<u8>)>,
+    written: WrittenStore,
 }
 
 impl MemoryOpener {
     pub fn new(entries: Vec<(String, Vec<u8>)>) -> Self {
-        Self { entries }
+        Self {
+            entries,
+            written: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn written(&self) -> Vec<(String, Vec<u8>)> {
+        self.written.lock().unwrap().clone()
+    }
+}
+
+struct MemorySink {
+    name: String,
+    buffer: Vec<u8>,
+    store: WrittenStore,
+}
+
+impl Write for MemorySink {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.buffer.extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for MemorySink {
+    fn drop(&mut self) {
+        self.store
+            .lock()
+            .unwrap()
+            .push((self.name.clone(), std::mem::take(&mut self.buffer)));
     }
 }
 
@@ -63,6 +130,14 @@ impl Opener for MemoryOpener {
             .find(|(name, _)| name == source)
             .map(|(_, content)| Box::new(Cursor::new(content.clone())) as Box<dyn Source>)
             .ok_or_else(|| Error::Config(format!("source not found: {source}")))
+    }
+
+    fn create(&self, target: &str) -> Result<Box<dyn Sink>, Error> {
+        Ok(Box::new(MemorySink {
+            name: target.to_string(),
+            buffer: Vec::new(),
+            store: self.written.clone(),
+        }))
     }
 }
 
@@ -119,6 +194,10 @@ pub fn opener() -> Arc<dyn Opener> {
 
 pub fn open(source: &str) -> Result<Box<dyn Source>, Error> {
     opener().open(source)
+}
+
+pub fn create(target: &str) -> Result<Box<dyn Sink>, Error> {
+    opener().create(target)
 }
 
 pub fn read_to_string(source: &str) -> Result<String, Error> {
