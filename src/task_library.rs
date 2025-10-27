@@ -148,11 +148,12 @@ const SOURCE_COLUMN: &str = "source_value";
 const TARGET_COLUMN: &str = "target_value";
 
 fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
-    let handle = opener::open(source)?;
+    let mut content = String::new();
+    std::io::Read::read_to_string(&mut opener::open(source)?, &mut content)?;
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
-        .from_reader(handle);
+        .from_reader(crate::contract::without_bom(&content).as_bytes());
 
     let headers = reader.headers()?.clone();
     let position = |name: &str| headers.iter().position(|header| header.trim() == name);
@@ -1583,6 +1584,24 @@ mod tests {
             json!({"code_map": {"sex": {"M": "male", "F": null}}}),
         );
         assert_eq!(column(&data, "sex"), vec![Some("male".into()), None]);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn map_files_with_a_byte_order_mark_map_values() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            (
+                "sex.csv".into(),
+                "\u{feff}source_value,target_value\nM,male\n".as_bytes().to_vec(),
+            ),
+        ])));
+
+        let mut data = batch(&[("sex", &[Some("M")])]);
+        run(&mut data, "map_codes", json!({"code_map": {"sex": "sex.csv"}}));
+        assert_eq!(column(&data, "sex"), vec![Some("male".into())]);
+
+        crate::opener::set_opener(previous);
     }
 
     #[test]
