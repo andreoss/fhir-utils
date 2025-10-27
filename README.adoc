@@ -256,7 +256,8 @@ Ambiguous numeric forms read month first.
   are reported once per file and column.
 - A bare year between 1900 and 2200, or a year-month such as `1985-06`, is valid
   for date fields and keeps its precision.
-- Naive datetimes are localized with `general.timeZone`.
+- Naive datetimes are localized with `general.timeZone`; an offset embedded in the
+  value wins over the contract zone.
 
 == Required field defaults
 

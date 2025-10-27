@@ -23,6 +23,12 @@ const DATE_TIME_FORMATS: &[&str] = &[
     "%Y%m%d%H%M",
 ];
 
+const DATE_TIME_OFFSET_FORMATS: &[&str] = &[
+    "%Y-%m-%d %H:%M:%S%.f%z",
+    "%Y-%m-%dT%H:%M:%S%.f%z",
+    "%Y%m%d%H%M%S%z",
+];
+
 const DATE_FORMATS: &[&str] = &[
     "%Y-%m-%d",
     "%Y/%m/%d",
@@ -255,6 +261,11 @@ pub fn datetime(value: &str, zone: Option<&str>) -> Option<String> {
 
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
         return Some(parsed.to_rfc3339_opts(SecondsFormat::Secs, false));
+    }
+    for format in DATE_TIME_OFFSET_FORMATS {
+        if let Ok(parsed) = chrono::DateTime::parse_from_str(value, format) {
+            return Some(parsed.to_rfc3339_opts(SecondsFormat::Secs, false));
+        }
     }
 
     let naive = parse_naive(value)?;
@@ -694,6 +705,18 @@ mod tests {
             "2021-06-01T00:00:00+00:00"
         );
         assert!(datetime("not a date", None).is_none());
+    }
+
+    #[test]
+    fn embedded_offsets_win_over_the_contract_zone() {
+        assert_eq!(
+            datetime("2021-06-01 10:00:00+02:00", Some("America/New_York")).unwrap(),
+            "2021-06-01T10:00:00+02:00"
+        );
+        assert_eq!(
+            datetime("20210601100000+0200", Some("America/New_York")).unwrap(),
+            "2021-06-01T10:00:00+02:00"
+        );
     }
 
     #[test]
