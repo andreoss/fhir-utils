@@ -39,6 +39,27 @@ fn validate_print_round_trips_the_resolved_contract() {
 }
 
 #[test]
+fn verbose_prints_phase_timings_on_stderr() {
+    let base = fixture_tree();
+    let output = base.path().join("out");
+    let result = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("--verbose")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("timings"), "{stderr}");
+    assert!(stderr.contains("read"), "{stderr}");
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(!stdout.contains("timings"), "{stdout}");
+}
+
+#[test]
 fn validate_rejects_an_invalid_timezone() {
     let output = validate("invalid_timezone.json");
     assert!(!output.status.success());

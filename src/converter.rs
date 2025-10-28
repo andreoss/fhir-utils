@@ -14,6 +14,43 @@ use tracing::warn;
 
 pub const NO_GROUP_BY_KEY: &str = "NoGroupByKey";
 
+thread_local! {
+    static PHASE_TIMINGS: std::cell::RefCell<PhaseTimings> =
+        const { std::cell::RefCell::new(PhaseTimings::new()) };
+}
+
+/// Wall-clock spent per pipeline phase since the last take.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PhaseTimings {
+    pub read: std::time::Duration,
+    pub tasks: std::time::Duration,
+    pub build: std::time::Duration,
+}
+
+impl PhaseTimings {
+    const fn new() -> Self {
+        Self {
+            read: std::time::Duration::ZERO,
+            tasks: std::time::Duration::ZERO,
+            build: std::time::Duration::ZERO,
+        }
+    }
+}
+
+pub fn take_phase_timings() -> PhaseTimings {
+    PHASE_TIMINGS.with(|timings| std::mem::take(&mut *timings.borrow_mut()))
+}
+
+fn time_phase<T>(
+    phase: fn(&mut PhaseTimings) -> &mut std::time::Duration,
+    work: impl FnOnce() -> T,
+) -> T {
+    let start = std::time::Instant::now();
+    let result = work();
+    PHASE_TIMINGS.with(|timings| *phase(&mut timings.borrow_mut()) += start.elapsed());
+    result
+}
+
 pub type RecordConverter = fn(&str, &Value, &Value) -> Result<Vec<Value>, Error>;
 
 #[derive(Clone, Copy)]
@@ -95,7 +132,7 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
     }
 
     fn fill(&mut self) -> Result<bool, Error> {
-        let chunk = match self.reader.next_chunk()? {
+        let chunk = match time_phase(|t| &mut t.read, || self.reader.next_chunk())? {
             Some(chunk) => chunk,
             None => return Ok(false),
         };
@@ -117,7 +154,10 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
                 params: HashMap::from([("column".to_string(), Value::String(id_key.clone()))]),
             });
         }
-        let failures = execute_task_chain(&mut batch, &tasks, self.options.registry);
+        let failures = time_phase(
+            |t| &mut t.tasks,
+            || execute_task_chain(&mut batch, &tasks, self.options.registry),
+        );
         for failure in &failures {
             warn!(task = failure.task, error = %failure.error, "task failed");
         }
@@ -215,7 +255,10 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
             meta::meta_for_row(&self.meta, row_num, dispatch::source_record_id(&row.record));
 
         Some(
-            match (self.converter)(&row.group_by_key, &row.record, &row_meta) {
+            match time_phase(
+                |t| &mut t.build,
+                || (self.converter)(&row.group_by_key, &row.record, &row_meta),
+            ) {
                 Ok(resources) => ConvertedRow {
                     exception: None,
                     group_by_key: row.group_by_key,

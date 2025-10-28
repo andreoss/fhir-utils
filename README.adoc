@@ -34,6 +34,7 @@ cargo test                                                   # unit, integration
 | `-o`, `--output` | output directory, created when missing | yes for `convert`
 | `--strict` | fail on a task error, an empty group key or a row that builds nothing | no
 | `--bundle [<type>]` | one bundle per group key: `collection` (default), `batch`, `transaction` | no
+| `--verbose` | per-file read, tasks, build and write timings on standard error | no
 |===
 
 `-d` and `-f` are mutually exclusive; `-f` without `-c` reads the contract from

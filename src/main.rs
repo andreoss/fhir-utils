@@ -78,6 +78,8 @@ enum Commands {
             help = "Write one bundle per group key: collection, batch or transaction"
         )]
         bundle: Option<String>,
+        #[arg(long, help = "Print per-file phase timings on standard error")]
+        verbose: bool,
     },
 }
 
@@ -106,7 +108,8 @@ fn main() {
             output,
             strict,
             bundle,
-        } => run_conversion(directory, file, config_dir, output, strict, bundle),
+            verbose,
+        } => run_conversion(directory, file, config_dir, output, strict, bundle, verbose),
     };
 
     if let Err(error) = result {
@@ -188,6 +191,7 @@ fn run_transformation(
             opener: None,
             strict,
             bundle: None,
+            verbose: false,
         },
         &mut std::io::stdout(),
     )?;
@@ -208,6 +212,7 @@ fn run_conversion(
     output: PathBuf,
     strict: bool,
     bundle: Option<String>,
+    verbose: bool,
 ) -> Result<(), Error> {
     if directory.is_none() && file.is_none() {
         return Err(Error::Config("convert needs -d or -f".into()));
@@ -221,6 +226,7 @@ fn run_conversion(
         opener: None,
         strict,
         bundle,
+        verbose,
     })?;
     println!(
         "Converted {} file(s), read {} row(s), wrote {} resource(s){}{}, skipped {} file(s){}",

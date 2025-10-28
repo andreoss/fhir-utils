@@ -23,6 +23,7 @@ pub struct ConvertRequest {
     pub opener: Option<Arc<dyn Opener>>,
     pub strict: bool,
     pub bundle: Option<String>,
+    pub verbose: bool,
 }
 
 impl std::fmt::Debug for ConvertRequest {
@@ -73,6 +74,11 @@ impl ConvertRequest {
 
     pub fn bundled(mut self, bundle_type: impl Into<String>) -> Self {
         self.bundle = Some(bundle_type.into());
+        self
+    }
+
+    pub fn verbose(mut self) -> Self {
+        self.verbose = true;
         self
     }
 }
@@ -298,6 +304,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         let written = summary.resources;
         let mut rows = 0usize;
         let mut empty: Vec<usize> = Vec::new();
+        let mut write_time = std::time::Duration::ZERO;
         let rows_iter =
             convert(&input, options).map_err(|error| input_failure(&file_path, "", error))?;
         for row in rows_iter {
@@ -339,7 +346,9 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                         summary.deduplicated += 1;
                         continue;
                     } else if let Some(path) = written_paths.get(&key) {
+                        let started = std::time::Instant::now();
                         merge_into_file(&*writer, path, &resource, &key)?;
+                        write_time += started.elapsed();
                         summary.deduplicated += 1;
                         continue;
                     }
@@ -351,6 +360,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                     }
                     entries.push(resource);
                 } else {
+                    let started = std::time::Instant::now();
                     let path = write_resource(
                         &*writer,
                         &request.output,
@@ -358,6 +368,7 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                         &resource,
                         &mut counters,
                     )?;
+                    write_time += started.elapsed();
                     if !key.1.is_empty() && !remote_output {
                         written_paths.insert(key, path);
                     }
@@ -388,9 +399,21 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
             resources = summary.resources - written,
             "converted"
         );
+        let phases = crate::converter::take_phase_timings();
+        if request.verbose {
+            eprintln!(
+                "timings {}: read {:.1?}, tasks {:.1?}, build {:.1?}, write {:.1?}",
+                input.display(),
+                phases.read,
+                phases.tasks,
+                phases.build,
+                write_time
+            );
+        }
     }
 
     if let Some(bundle_type) = &request.bundle {
+        let started = std::time::Instant::now();
         for (group_by_key, resources) in bundles {
             write_bundle(
                 &*writer,
@@ -399,6 +422,9 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 bundle_type,
                 resources,
             )?;
+        }
+        if request.verbose {
+            eprintln!("timings bundles: write {:.1?}", started.elapsed());
         }
     }
 
