@@ -244,7 +244,14 @@ fn read_source(source: &str, params: &ReaderParams) -> Result<RecordBatch, Error
 const SOURCE_COLUMN: &str = "source_value";
 const TARGET_COLUMN: &str = "target_value";
 
-fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
+pub(crate) fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
+    let (file, table) = match source.split_once('#') {
+        Some((file, table)) => (file, Some(table)),
+        None => (source, None),
+    };
+    if file.to_ascii_lowercase().ends_with(".json") {
+        return read_json_map(file, table);
+    }
     let mut content = String::new();
     std::io::Read::read_to_string(&mut opener::open(source)?, &mut content)?;
     let mut reader = csv::ReaderBuilder::new()
@@ -275,6 +282,30 @@ fn read_map_file(source: &str) -> Result<Map<String, Value>, Error> {
     Ok(mapping)
 }
 
+/// A JSON map file: one flat map, or many named tables addressed as `file.json#table`.
+fn read_json_map(file: &str, table: Option<&str>) -> Result<Map<String, Value>, Error> {
+    let mut content = String::new();
+    std::io::Read::read_to_string(&mut opener::open(file)?, &mut content)?;
+    let value: Value = serde_json::from_str(crate::contract::without_bom(&content))
+        .map_err(|error| Error::Config(format!("map file {file} is not valid JSON: {error}")))?;
+    let entries = value
+        .as_object()
+        .ok_or_else(|| Error::Config(format!("map file {file} must hold a JSON object")))?;
+    match table {
+        None => Ok(entries.clone()),
+        Some(table) => match entries.get(table).and_then(|value| value.as_object()) {
+            Some(entries) => Ok(entries.clone()),
+            None => {
+                let tables: Vec<&str> = entries.keys().map(String::as_str).collect();
+                Err(Error::Config(format!(
+                    "map file {file} has no table {table}; tables: {}",
+                    tables.join(", ")
+                )))
+            }
+        },
+    }
+}
+
 fn resolve_map(value: &Value, task: &str, name: &str) -> Result<Map<String, Value>, Error> {
     match value {
         Value::Object(map) => Ok(map.clone()),
@@ -290,7 +321,8 @@ fn mapped_value(
 ) -> Option<String> {
     let mapped = source
         .and_then(|source| mapping.get(source))
-        .or_else(|| mapping.get("default"));
+        .or_else(|| mapping.get("default"))
+        .or_else(|| mapping.get("__default__"));
     match mapped {
         Some(Value::Null) => None,
         Some(Value::String(value)) => Some(value.clone()),
@@ -741,18 +773,53 @@ fn map_codes(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result
             continue;
         }
         let mapping = resolve_map(mapping, "map_codes", "code_map")?;
+        let has_default = mapping.contains_key("default") || mapping.contains_key("__default__");
         let mut values = Vec::with_capacity(batch.row_count);
         let mut unmapped: Vec<String> = Vec::new();
+        let mut companions: HashMap<&str, Vec<Option<String>>> = HashMap::new();
+        const TRIPLE_FIELDS: [(&str, &str); 3] = [
+            ("system", "System"),
+            ("display", "Display"),
+            ("text", "Text"),
+        ];
         for row in 0..batch.row_count {
             let value = cell(batch, column, row);
             if let Some(value) = value {
-                if !mapping.contains_key(value) && !mapping.contains_key("default") {
+                if !mapping.contains_key(value) && !has_default {
                     unmapped.push(value.to_string());
                 }
             }
-            values.push(mapped_value(&mapping, value, value));
+            let entry = value
+                .and_then(|value| mapping.get(value))
+                .or_else(|| mapping.get("default"))
+                .or_else(|| mapping.get("__default__"));
+            match entry {
+                Some(Value::Object(triple)) => {
+                    values.push(
+                        triple
+                            .get("code")
+                            .and_then(|code| code.as_str())
+                            .map(String::from)
+                            .or_else(|| value.map(String::from)),
+                    );
+                    for (field, suffix) in TRIPLE_FIELDS {
+                        if let Some(text) = triple.get(field).and_then(|text| text.as_str()) {
+                            companions.entry(suffix).or_insert_with(|| {
+                                batch
+                                    .get_column(&format!("{column}{suffix}"))
+                                    .cloned()
+                                    .unwrap_or_else(|| vec![None; batch.row_count])
+                            })[row] = Some(text.to_string());
+                        }
+                    }
+                }
+                _ => values.push(mapped_value(&mapping, value, value)),
+            }
         }
         report_unmapped(batch, column, unmapped);
+        for (suffix, companion_values) in companions {
+            set_column(batch, &format!("{column}{suffix}"), companion_values);
+        }
         set_column(batch, column, values);
     }
     Ok(())
@@ -1808,6 +1875,88 @@ mod tests {
             json!({"code_map": {"sex": {"M": "male", "F": null}}}),
         );
         assert_eq!(column(&data, "sex"), vec![Some("male".into()), None]);
+    }
+
+    #[test]
+    fn map_codes_triple_targets_write_companion_columns() {
+        let mut data = batch(&[
+            ("allergyCode", &[Some("PEANUT"), Some("OTHER")]),
+            ("allergyCodeText", &[Some("kept"), Some("kept")]),
+        ]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"allergyCode": {
+                "PEANUT": {"code": "91935009", "system": "SNOMED", "display": "Allergy to peanut"}
+            }}}),
+        );
+        assert_eq!(
+            column(&data, "allergyCode"),
+            vec![Some("91935009".into()), Some("OTHER".into())]
+        );
+        assert_eq!(
+            column(&data, "allergyCodeSystem"),
+            vec![Some("SNOMED".into()), None]
+        );
+        assert_eq!(
+            column(&data, "allergyCodeDisplay"),
+            vec![Some("Allergy to peanut".into()), None]
+        );
+        assert_eq!(
+            column(&data, "allergyCodeText"),
+            vec![Some("kept".into()), Some("kept".into())]
+        );
+    }
+
+    #[test]
+    fn map_codes_accepts_a_dunder_default() {
+        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[("sex", &[Some("Z")]), ("filePath", &[Some("dunder.csv")])]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male", "__default__": "unknown"}}}),
+        );
+        assert_eq!(column(&data, "sex"), vec![Some("unknown".into())]);
+        let reported = REPORTED_UNMAPPED.with(|seen| seen.borrow().len());
+        assert_eq!(reported, 0);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn json_map_files_resolve_flat_and_by_table() {
+        let previous = crate::opener::opener();
+        crate::opener::set_opener(std::sync::Arc::new(crate::opener::MemoryOpener::new(vec![
+            (
+                "maps.json".into(),
+                br#"{"Gender": {"F": "female"}, "Ward": {"W1": "West"}}"#.to_vec(),
+            ),
+            ("flat.json".into(), br#"{"F": "female"}"#.to_vec()),
+        ])));
+
+        let mut by_table = batch(&[("gender", &[Some("F")])]);
+        run(
+            &mut by_table,
+            "map_codes",
+            json!({"code_map": {"gender": "maps.json#Gender"}}),
+        );
+        assert_eq!(column(&by_table, "gender"), vec![Some("female".into())]);
+
+        let mut flat = batch(&[("gender", &[Some("F")])]);
+        run(
+            &mut flat,
+            "map_codes",
+            json!({"code_map": {"gender": "flat.json"}}),
+        );
+        assert_eq!(column(&flat, "gender"), vec![Some("female".into())]);
+
+        let error = crate::task_library::read_map_file("maps.json#Missing")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("no table Missing"), "{error}");
+        assert!(error.contains("Gender, Ward"), "{error}");
+
+        crate::opener::set_opener(previous);
     }
 
     #[test]
