@@ -239,6 +239,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
   idempotent reloads.
 - The counter runs per group key, resource type and source file.
 - JSON is pretty printed with sorted keys.
+- Empty strings are pruned from every resource, and objects or arrays left empty by
+  that collapse with them; numbers, booleans and explicit null values survive.
 - `safeFileId` keeps `[A-Za-z0-9-]` and maps every other character to `_`.
 - Group key directories keep letters, digits, spaces and dots; path separators, control
   characters and `\ : * ? " < > |` become `_`, and an all-dot key becomes `_`.

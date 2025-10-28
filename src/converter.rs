@@ -219,7 +219,7 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
                 Ok(resources) => ConvertedRow {
                     exception: None,
                     group_by_key: row.group_by_key,
-                    resources,
+                    resources: resources.iter().filter_map(builders::prune_empty).collect(),
                     row_num,
                 },
                 Err(error) => ConvertedRow {
@@ -492,6 +492,38 @@ mod tests {
             "record": record.clone(),
             "meta": meta.clone(),
         })])
+    }
+
+    fn emits_empties(
+        group_by_key: &str,
+        _record: &Value,
+        _meta: &Value,
+    ) -> Result<Vec<Value>, crate::error::Error> {
+        Ok(vec![serde_json::json!({
+            "resourceType": "Patient",
+            "id": group_by_key,
+            "name": [{"family": "", "given": []}],
+            "gender": "female"
+        })])
+    }
+
+    #[test]
+    fn converted_resources_are_pruned_of_empty_values() {
+        let def = file_def();
+        let contract = contract(&def);
+        let registry = TaskRegistry::new();
+        let rows: Vec<_> = convert_with(
+            Cursor::new("a,b\n1,2\n"),
+            options(&contract, &def, &registry, 10),
+            emits_empties,
+        )
+        .unwrap()
+        .collect();
+
+        assert_eq!(
+            rows[0].resources[0],
+            serde_json::json!({"resourceType": "Patient", "id": "1", "gender": "female"})
+        );
     }
 
     #[test]

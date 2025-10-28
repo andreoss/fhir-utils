@@ -343,6 +343,26 @@ pub fn is_decimal(value: &str) -> bool {
     value.trim().parse::<f64>().is_ok()
 }
 
+/// Drops empty strings, then objects and arrays that end up empty; numbers,
+/// booleans and null survive, so builders may emit optional fields freely.
+pub fn prune_empty(value: &Value) -> Option<Value> {
+    match value {
+        Value::String(text) if text.is_empty() => None,
+        Value::Object(entries) => {
+            let pruned: Map<String, Value> = entries
+                .iter()
+                .filter_map(|(key, value)| prune_empty(value).map(|value| (key.clone(), value)))
+                .collect();
+            (!pruned.is_empty()).then_some(Value::Object(pruned))
+        }
+        Value::Array(items) => {
+            let pruned: Vec<Value> = items.iter().filter_map(prune_empty).collect();
+            (!pruned.is_empty()).then_some(Value::Array(pruned))
+        }
+        other => Some(other.clone()),
+    }
+}
+
 pub fn quantity(value: Option<&str>, unit: Option<&str>) -> Option<Value> {
     let parsed = non_empty(value)?.trim().parse::<f64>().ok()?;
     let mut quantity = Map::new();
@@ -732,6 +752,33 @@ mod tests {
             datetime("202106011000", Some("UTC")).unwrap(),
             "2021-06-01T10:00:00+00:00"
         );
+    }
+
+    #[test]
+    fn prune_empty_drops_empty_strings_and_collapsed_containers() {
+        let resource = json!({
+            "resourceType": "Patient",
+            "id": "p1",
+            "name": [{"family": "", "given": []}],
+            "address": [{"city": "Boston", "line": ["", ""]}],
+            "active": false,
+            "multipleBirthInteger": 0,
+            "note": null
+        });
+        let pruned = prune_empty(&resource).unwrap();
+        assert_eq!(
+            pruned,
+            json!({
+                "resourceType": "Patient",
+                "id": "p1",
+                "address": [{"city": "Boston"}],
+                "active": false,
+                "multipleBirthInteger": 0,
+                "note": null
+            })
+        );
+        assert!(prune_empty(&json!({"a": {"b": ""}})).is_none());
+        assert_eq!(prune_empty(&json!("x")).unwrap(), json!("x"));
     }
 
     #[test]
