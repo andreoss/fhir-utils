@@ -325,6 +325,8 @@ not carry clinical meaning.
 | Task target no field reads | warning at load; fatal with `--strict`
 | Rows without a group key | warning once per file; fatal with `--strict`
 | Rows producing no resource | counted in the summary and listed; fatal with `--strict`
+| Reference to a resource the run did not write | warning listing up to five; fatal with `--strict`
+| Resource carrying only its type, id and meta | warning listing up to five; fatal with `--strict`
 | Unlisted code map value | warning once per file and column, value passes through
 | Input that is not UTF-8 | run stops naming the file and the re-encoding command
 | Row conversion error | run stops with the group key and file

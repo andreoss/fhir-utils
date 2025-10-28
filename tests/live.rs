@@ -16,6 +16,14 @@ fn convert_fixture_tree(output: &Path) -> fhir_utils::cli::ConvertSummary {
         .expect("conversion failed")
 }
 
+#[test]
+fn the_live_tree_passes_the_output_validators_in_strict_mode() {
+    let output = tempfile::TempDir::new().unwrap();
+    let request = ConvertRequest::directory(fixtures(), output.path().to_path_buf()).strict();
+    let summary = run_convert(&request).expect("strict conversion failed");
+    assert!(summary.resources > 0);
+}
+
 fn is_generated_id(value: &str) -> bool {
     match value.split_once('.') {
         Some((nanos, hex)) => {

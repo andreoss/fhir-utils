@@ -263,6 +263,9 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let mut seen_remote: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     let remote_output = opener::scheme(&output.to_string_lossy()).is_some();
+    let mut all_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut all_references: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut hollow: Vec<String> = Vec::new();
 
     for input in inputs {
         let stem = file_stem(&input);
@@ -317,6 +320,13 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                     .unwrap_or_default()
                     .to_string();
                 let key = (resource_type, id);
+                if !key.1.is_empty() {
+                    all_ids.insert(format!("{}/{}", key.0, key.1));
+                }
+                collect_references(&resource, &mut all_references);
+                if is_hollow(&resource) {
+                    hollow.push(format!("{}/{}", key.0, key.1));
+                }
                 if !key.1.is_empty() {
                     if remote_output && request.bundle.is_none() {
                         if !seen_remote.insert(key.clone()) {
@@ -392,7 +402,70 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         }
     }
 
+    let dangling: Vec<String> = all_references
+        .into_iter()
+        .filter(|reference| !all_ids.contains(reference))
+        .collect();
+    for (finding, values) in [
+        ("dangling references", &dangling),
+        ("hollow resources", &hollow),
+    ] {
+        if values.is_empty() {
+            continue;
+        }
+        let shown: Vec<&str> = values.iter().take(5).map(String::as_str).collect();
+        let rest = values.len().saturating_sub(shown.len());
+        let more = if rest > 0 {
+            format!(" and {rest} more")
+        } else {
+            String::new()
+        };
+        let detail = format!("{} {finding}: {}{more}", values.len(), shown.join(", "));
+        if request.strict {
+            return Err(Error::Conversion(detail));
+        }
+        warn!("{detail}");
+    }
+
     Ok(summary)
+}
+
+/// Collects `Type/id` reference strings; URIs and fragments are not checked.
+fn collect_references(value: &Value, references: &mut std::collections::BTreeSet<String>) {
+    match value {
+        Value::Object(entries) => {
+            for (name, value) in entries {
+                if name == "reference" {
+                    if let Some(reference) = value.as_str() {
+                        let local = reference.split_once('/').is_some_and(|(head, _)| {
+                            !head.is_empty() && head.chars().all(|c| c.is_ascii_alphabetic())
+                        });
+                        if local {
+                            references.insert(reference.to_string());
+                        }
+                        continue;
+                    }
+                }
+                collect_references(value, references);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_references(item, references);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A resource carrying nothing beyond its type, id and meta.
+fn is_hollow(resource: &Value) -> bool {
+    match resource.as_object() {
+        Some(entries) => entries
+            .keys()
+            .all(|key| matches!(key.as_str(), "resourceType" | "id" | "meta")),
+        None => true,
+    }
 }
 
 fn write_bundle(
@@ -808,6 +881,73 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn hollow_resources_are_detected() {
+        assert!(is_hollow(
+            &json!({"resourceType": "Patient", "id": "p1", "meta": {}})
+        ));
+        assert!(!is_hollow(
+            &json!({"resourceType": "Patient", "id": "p1", "gender": "female"})
+        ));
+    }
+
+    #[test]
+    fn references_collect_only_local_type_id_forms() {
+        let resource = json!({
+            "subject": {"reference": "Patient/p1"},
+            "performer": [{"reference": "urn:uuid:123"}],
+            "attachment": {"url": "http://example.org/Binary/1"}
+        });
+        let mut references = std::collections::BTreeSet::new();
+        collect_references(&resource, &mut references);
+        assert_eq!(
+            references.into_iter().collect::<Vec<_>>(),
+            vec!["Patient/p1".to_string()]
+        );
+    }
+
+    fn conditions_only_base() -> TempDir {
+        let base = TempDir::new().unwrap();
+        fs::create_dir_all(base.path().join("input")).unwrap();
+        fs::create_dir_all(base.path().join("config")).unwrap();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            r#"{
+                "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+                "fileDefinitions": {
+                    "cond": {
+                        "fileType": "csv",
+                        "resourceType": "Condition",
+                        "groupByKey": "patientInternalId"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            base.path().join("input/cond.csv"),
+            "patientInternalId,conditionCode\np1,E11.9\n",
+        )
+        .unwrap();
+        base
+    }
+
+    #[test]
+    fn dangling_references_warn_and_fail_strict() {
+        let base = conditions_only_base();
+        let output = TempDir::new().unwrap();
+        let summary = run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        assert_eq!(summary.resources, 1);
+
+        let strict_output = TempDir::new().unwrap();
+        let error =
+            run_convert(&ConvertRequest::directory(base.path(), strict_output.path()).strict())
+                .unwrap_err()
+                .to_string();
+        assert!(error.contains("dangling references"), "{error}");
+        assert!(error.contains("Patient/p1"), "{error}");
     }
 
     #[test]
