@@ -90,8 +90,41 @@ fn coerce(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<()
     Ok(())
 }
 
+/// Applies a diff over the record columns: a value sets a constant, an empty
+/// string or null deletes, and a `name[x]` key patches the first column whose
+/// name starts with the prefix. Unmentioned columns pass through untouched.
+fn merge_diff(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
+    let diff = map_param(params, "merge_diff", "diff")?;
+    for (key, value) in diff {
+        let column = match key.strip_suffix("[x]") {
+            Some(prefix) => {
+                let mut names: Vec<&String> = batch
+                    .columns
+                    .keys()
+                    .filter(|name| name.starts_with(prefix))
+                    .collect();
+                names.sort();
+                match names.first() {
+                    Some(name) => name.to_string(),
+                    None => continue,
+                }
+            }
+            None => key.clone(),
+        };
+        let deletes =
+            matches!(value, Value::Null) || matches!(value, Value::String(text) if text.is_empty());
+        if deletes {
+            batch.columns.remove(&column);
+        } else if let Some(constant) = crate::tasks::constant_value(value) {
+            set_column(batch, &column, vec![Some(constant); batch.row_count]);
+        }
+    }
+    Ok(())
+}
+
 pub fn register(registry: &mut TaskRegistry) {
     registry.register("coerce", Arc::new(coerce));
+    registry.register("merge_diff", Arc::new(merge_diff));
     registry.register("derive_resource_id", Arc::new(derive_resource_id));
     registry.register("append_list", Arc::new(append_list));
     registry.register("build_object_array", Arc::new(build_object_array));
@@ -1227,6 +1260,45 @@ mod tests {
             json!({"columns": ["a"], "casing": "UPPER LOWER"}),
         );
         assert_eq!(column(&data, "a"), vec![Some("ab".into()), None]);
+    }
+
+    #[test]
+    fn merge_diff_sets_deletes_and_prefix_matches() {
+        let mut data = batch(&[
+            ("gender", &[Some("F"), Some("M")]),
+            ("ssn", &[Some("123-45-6789"), None]),
+            ("valueString", &[Some("a"), Some("b")]),
+            ("valueQuantity", &[Some("1"), Some("2")]),
+            ("nameLast", &[Some("Smith"), Some("Jones")]),
+        ]);
+        run(
+            &mut data,
+            "merge_diff",
+            json!({"diff": {
+                "gender": "unknown",
+                "ssn": "",
+                "value[x]": null,
+                "streamType": "historical"
+            }}),
+        );
+        assert_eq!(
+            column(&data, "gender"),
+            vec![Some("unknown".into()), Some("unknown".into())]
+        );
+        assert!(data.get_column("ssn").is_none());
+        assert!(
+            data.get_column("valueQuantity").is_none(),
+            "the first prefixed column sorts before valueString"
+        );
+        assert!(data.get_column("valueString").is_some());
+        assert_eq!(
+            column(&data, "streamType"),
+            vec![Some("historical".into()), Some("historical".into())]
+        );
+        assert_eq!(
+            column(&data, "nameLast"),
+            vec![Some("Smith".into()), Some("Jones".into())]
+        );
     }
 
     #[test]

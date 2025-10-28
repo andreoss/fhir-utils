@@ -208,6 +208,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 | `format_date` | `columns`, `date_format`
 | `join_data` | `secondary_data_source`, `join_type`, `join_on`; optional `source_type`, `reader_params`
 | `map_codes` | `code_map`, whose per-column map takes a `default` for unlisted values
+| `merge_diff` | `diff`: value sets a constant, `""` or `null` deletes, `name[x]` patches the first prefixed column
 | `remove_whitespace_from_columns` | none
 | `rename_columns` | `column_map`
 | `replace_text` | `column_name`, `match`, `replacement`, `options`

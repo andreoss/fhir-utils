@@ -101,7 +101,7 @@ fn add_constant(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Res
     Ok(())
 }
 
-fn constant_value(value: &Value) -> Option<String> {
+pub(crate) fn constant_value(value: &Value) -> Option<String> {
     match value {
         Value::String(value) => Some(value.clone()),
         Value::Bool(value) => Some(value.to_string()),
