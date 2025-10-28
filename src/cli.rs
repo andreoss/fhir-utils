@@ -24,6 +24,10 @@ pub struct ConvertRequest {
     pub strict: bool,
     pub bundle: Option<String>,
     pub verbose: bool,
+    /// Fallback configuration directories; the primary directory shadows them.
+    pub config_layers: Vec<PathBuf>,
+    /// Expected SHA-256 of the contract bytes; a mismatch stops the run.
+    pub contract_digest: Option<String>,
 }
 
 impl std::fmt::Debug for ConvertRequest {
@@ -79,6 +83,16 @@ impl ConvertRequest {
 
     pub fn verbose(mut self) -> Self {
         self.verbose = true;
+        self
+    }
+
+    pub fn with_config_layer(mut self, layer: impl Into<PathBuf>) -> Self {
+        self.config_layers.push(layer.into());
+        self
+    }
+
+    pub fn pinned(mut self, digest: impl Into<String>) -> Self {
+        self.contract_digest = Some(digest.into());
         self
     }
 }
@@ -148,25 +162,48 @@ fn input_failure(file_path: &str, group_by_key: &str, error: Error) -> Error {
 }
 
 fn load_contract(request: &ConvertRequest, config_dir: &Path) -> Result<Contract, Error> {
-    let contract_path = config_dir.join(&config().mapping_config_file_name);
-    let remote_config = opener::scheme(&config_dir.to_string_lossy()).is_some();
-    if !remote_config && !contract_path.exists() {
-        return Err(Error::Config(format!(
-            "contract not found: {}",
-            contract_path.display()
-        )));
-    }
+    let mut layers = vec![config_dir.to_path_buf()];
+    layers.extend(request.config_layers.iter().cloned());
+    let name = &config().mapping_config_file_name;
+    let contract_path = layers
+        .iter()
+        .map(|layer| layer.join(name))
+        .find(|path| opener::scheme(&path.to_string_lossy()).is_some() || path.exists())
+        .ok_or_else(|| {
+            Error::Config(format!(
+                "contract not found: {}",
+                config_dir.join(name).display()
+            ))
+        })?;
+    let remote_config = opener::scheme(&contract_path.to_string_lossy()).is_some();
 
-    let source_opener = request
-        .opener
-        .clone()
-        .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.to_path_buf())));
+    let source_opener = request.opener.clone().unwrap_or_else(|| {
+        if layers.len() == 1 {
+            Arc::new(LocalOpener::new(layers[0].clone()))
+        } else {
+            Arc::new(opener::LayeredOpener::new(
+                layers
+                    .iter()
+                    .map(|layer| Arc::new(LocalOpener::new(layer.clone())) as Arc<dyn Opener>)
+                    .collect(),
+            ))
+        }
+    });
     opener::set_opener(source_opener);
     let contract_text = if remote_config {
         opener::read_to_string(&contract_path.to_string_lossy())?
     } else {
         fs::read_to_string(&contract_path)?
     };
+    if let Some(expected) = &request.contract_digest {
+        use sha2::Digest as _;
+        let actual = format!("{:x}", sha2::Sha256::digest(contract_text.as_bytes()));
+        if !actual.eq_ignore_ascii_case(expected.trim_start_matches("sha256:")) {
+            return Err(Error::Config(format!(
+                "contract digest mismatch: expected {expected}, found sha256:{actual}"
+            )));
+        }
+    }
     let contract = Contract::load(&contract_text)?;
     let warnings = contract.lint();
     if request.strict && !warnings.is_empty() {
@@ -907,6 +944,63 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn config_layers_resolve_first_match_wins() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("config/data-contract.json"),
+            CONTRACT.replace(
+                r#""groupByKey": "patientInternalId""#,
+                r#""groupByKey": "patientInternalId",
+                "tasks": [{"task": "map_codes", "code_map": {"nameLast": "names.csv"}}]"#,
+            ),
+        )
+        .unwrap();
+        let layer = TempDir::new().unwrap();
+        fs::write(
+            layer.path().join("names.csv"),
+            "source_value,target_value\nSmith,FromLayer\n",
+        )
+        .unwrap();
+        fs::write(
+            layer.path().join("data-contract.json"),
+            r#"{"general": {}, "fileDefinitions": {}}"#,
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let request =
+            ConvertRequest::directory(base.path(), output.path()).with_config_layer(layer.path());
+        run_convert(&request).unwrap();
+
+        let content =
+            fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
+        let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            patient["name"][0]["family"],
+            json!("FromLayer"),
+            "the map file resolves from the fallback layer, the contract from the primary"
+        );
+    }
+
+    #[test]
+    fn a_contract_digest_pins_the_contract_bytes() {
+        use sha2::Digest as _;
+        let base = base_directory();
+        let contract_bytes = fs::read(base.path().join("config/data-contract.json")).unwrap();
+        let digest = format!("{:x}", sha2::Sha256::digest(&contract_bytes));
+        let output = TempDir::new().unwrap();
+
+        let pinned = ConvertRequest::directory(base.path(), output.path()).pinned(digest.clone());
+        assert!(run_convert(&pinned).is_ok());
+
+        let wrong = ConvertRequest::directory(base.path(), output.path())
+            .pinned("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+        let error = run_convert(&wrong).unwrap_err().to_string();
+        assert!(error.contains("contract digest mismatch"), "{error}");
+        assert!(error.contains(&digest), "{error}");
     }
 
     #[test]

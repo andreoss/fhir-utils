@@ -30,7 +30,8 @@ cargo test                                                   # unit, integration
 | Flag | Meaning | Required
 | `-f`, `--file` | contract file for `validate`, input file for `convert` | yes for `validate`
 | `-d`, `--directory` | base directory holding `input/` and `config/` | one of `-d` or `-f`
-| `-c`, `--config-dir` | directory holding the contract | with `-f`, unless `MAPPING_CONFIG_DIRECTORY` is set
+| `-c`, `--config-dir` | directory holding the contract; may repeat, later ones are fallback layers | with `-f`, unless `MAPPING_CONFIG_DIRECTORY` is set
+| `--contract-digest` | expected SHA-256 of the contract; a mismatch stops the run | no
 | `-o`, `--output` | output directory, created when missing | yes for `convert`
 | `--strict` | fail on a task error, an empty group key or a row that builds nothing | no
 | `--bundle [<type>]` | one bundle per group key: `collection` (default), `batch`, `transaction` | no
@@ -383,3 +384,7 @@ Output resources are written through the same opener when the output carries a U
 scheme; a plain path writes to the local filesystem as before.
 The `optimized-streaming` build feature adds `http://` and `https://` sources,
 including a remote contract directory; other schemes still need a registered backend.
+Repeating `-c` layers configuration directories: the contract and every map or
+definition resolve from the first layer that has them, so a user layer ships only
+its overrides on top of a shared base. `--contract-digest sha256hex` verifies the
+contract bytes before the run, making a distributed contract reproducible.

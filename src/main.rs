@@ -63,9 +63,16 @@ enum Commands {
         #[arg(
             short = 'c',
             long,
-            help = "Configuration directory holding the data contract"
+            action = clap::ArgAction::Append,
+            help = "Configuration directory; may repeat, later ones are fallback layers"
         )]
-        config_dir: Option<PathBuf>,
+        config_dir: Vec<PathBuf>,
+        #[arg(
+            long,
+            value_name = "SHA256",
+            help = "Expected SHA-256 of the contract; a mismatch stops the run"
+        )]
+        contract_digest: Option<String>,
         #[arg(short, long, help = "Output directory for FHIR resources")]
         output: PathBuf,
         #[arg(long, help = "Fail the run on a task error or an empty group key")]
@@ -105,11 +112,21 @@ fn main() {
             directory,
             file,
             config_dir,
+            contract_digest,
             output,
             strict,
             bundle,
             verbose,
-        } => run_conversion(directory, file, config_dir, output, strict, bundle, verbose),
+        } => run_conversion(
+            directory,
+            file,
+            config_dir,
+            contract_digest,
+            output,
+            strict,
+            bundle,
+            verbose,
+        ),
     };
 
     if let Err(error) = result {
@@ -192,6 +209,8 @@ fn run_transformation(
             strict,
             bundle: None,
             verbose: false,
+            config_layers: Vec::new(),
+            contract_digest: None,
         },
         &mut std::io::stdout(),
     )?;
@@ -205,10 +224,12 @@ fn run_transformation(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_conversion(
     directory: Option<PathBuf>,
     file: Option<PathBuf>,
-    config_dir: Option<PathBuf>,
+    mut config_dir: Vec<PathBuf>,
+    contract_digest: Option<String>,
     output: PathBuf,
     strict: bool,
     bundle: Option<String>,
@@ -218,15 +239,22 @@ fn run_conversion(
         return Err(Error::Config("convert needs -d or -f".into()));
     }
 
+    let primary = if config_dir.is_empty() {
+        None
+    } else {
+        Some(config_dir.remove(0))
+    };
     let summary = run_convert(&ConvertRequest {
         base: directory,
         file,
-        config_dir,
+        config_dir: primary,
         output,
         opener: None,
         strict,
         bundle,
         verbose,
+        config_layers: config_dir,
+        contract_digest,
     })?;
     println!(
         "Converted {} file(s), read {} row(s), wrote {} resource(s){}{}, skipped {} file(s){}",

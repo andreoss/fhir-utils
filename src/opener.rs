@@ -80,6 +80,38 @@ impl Opener for LocalOpener {
     }
 }
 
+/// Tries each layer in order and returns the first source that opens, so a
+/// user layer shadows a base layer. Writes go to the first layer.
+pub struct LayeredOpener {
+    layers: Vec<Arc<dyn Opener>>,
+}
+
+impl LayeredOpener {
+    pub fn new(layers: Vec<Arc<dyn Opener>>) -> Self {
+        Self { layers }
+    }
+}
+
+impl Opener for LayeredOpener {
+    fn open(&self, source: &str) -> Result<Box<dyn Source>, Error> {
+        let mut last = Error::Config(format!("no layer opens {source}"));
+        for layer in &self.layers {
+            match layer.open(source) {
+                Ok(found) => return Ok(found),
+                Err(error) => last = error,
+            }
+        }
+        Err(last)
+    }
+
+    fn create(&self, target: &str) -> Result<Box<dyn Sink>, Error> {
+        match self.layers.first() {
+            Some(layer) => layer.create(target),
+            None => Err(Error::Config(format!("no layer to write {target}"))),
+        }
+    }
+}
+
 pub struct MemoryOpener {
     entries: Vec<(String, Vec<u8>)>,
     written: WrittenStore,
