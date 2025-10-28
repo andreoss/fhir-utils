@@ -267,6 +267,7 @@ const KNOWN_TASKS: &[&str] = &[
     "condition_column_with_prerequisite",
     "convert_to_list",
     "copy_columns",
+    "extract_regex",
     "filter_to_columns",
     "find_not_null_value",
     "format_date",
@@ -447,6 +448,7 @@ impl Contract {
             "convert_to_list" => &["column"][..],
             "copy_columns" => &["columns", "target_column"][..],
             "derive_resource_id" => &["column"][..],
+            "extract_regex" => &["column", "pattern", "target_columns"][..],
             "filter_to_columns" => &["source_column", "target_columns", "filters"][..],
             "find_not_null_value" => &["columns", "target_column"][..],
             "format_date" => &["columns", "date_format"][..],
@@ -500,6 +502,7 @@ impl Contract {
                 "convert_to_list" => &["column", "separator"][..],
                 "copy_columns" => &["columns", "target_column", "value_separator"][..],
                 "derive_resource_id" => &["column"][..],
+                "extract_regex" => &["column", "pattern", "target_columns"][..],
                 "filter_to_columns" => &["source_column", "target_columns", "filters"][..],
                 "find_not_null_value" => &["columns", "target_column"][..],
                 "format_date" => &["columns", "date_format"][..],
@@ -538,6 +541,14 @@ impl Contract {
                         )));
                     }
                 }
+            }
+        }
+
+        if task_name == "extract_regex" {
+            if let Some(pattern) = params.get("pattern").and_then(|v| v.as_str()) {
+                regex::Regex::new(pattern).map_err(|error| {
+                    Error::Config(format!("extract_regex pattern is invalid: {error}"))
+                })?;
             }
         }
 

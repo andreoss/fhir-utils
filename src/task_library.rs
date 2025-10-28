@@ -122,8 +122,36 @@ fn merge_diff(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Resul
     Ok(())
 }
 
+/// Captures regex groups from a column into named target columns; rows that do
+/// not match leave every target null.
+fn extract_regex(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
+    let column = string_param(params, "extract_regex", "column")?;
+    let pattern = string_param(params, "extract_regex", "pattern")?;
+    let target_columns = string_list_param(params, "extract_regex", "target_columns")?;
+    let regex = Regex::new(pattern)
+        .map_err(|error| Error::Config(format!("extract_regex pattern is invalid: {error}")))?;
+
+    let mut extracted: Vec<Vec<Option<String>>> =
+        vec![Vec::with_capacity(batch.row_count); target_columns.len()];
+    for row in 0..batch.row_count {
+        let captures = cell(batch, column, row).and_then(|value| regex.captures(value));
+        for (index, values) in extracted.iter_mut().enumerate() {
+            values.push(captures.as_ref().and_then(|captures| {
+                captures
+                    .get(index + 1)
+                    .map(|group| group.as_str().to_string())
+            }));
+        }
+    }
+    for (target, values) in target_columns.iter().zip(extracted) {
+        set_column(batch, target, values);
+    }
+    Ok(())
+}
+
 pub fn register(registry: &mut TaskRegistry) {
     registry.register("coerce", Arc::new(coerce));
+    registry.register("extract_regex", Arc::new(extract_regex));
     registry.register("merge_diff", Arc::new(merge_diff));
     registry.register("derive_resource_id", Arc::new(derive_resource_id));
     registry.register("append_list", Arc::new(append_list));
@@ -1346,6 +1374,25 @@ mod tests {
             json!({"columns": ["a"], "casing": "UPPER LOWER"}),
         );
         assert_eq!(column(&data, "a"), vec![Some("ab".into()), None]);
+    }
+
+    #[test]
+    fn extract_regex_lands_capture_groups_in_target_columns() {
+        let mut data = batch(&[(
+            "range",
+            &[Some("1.1 mL - 1.5 mL"), Some("no numbers"), None],
+        )]);
+        run(
+            &mut data,
+            "extract_regex",
+            json!({
+                "column": "range",
+                "pattern": r"([0-9.]+)\s*mL\s*-\s*([0-9.]+)\s*mL",
+                "target_columns": ["low", "high"]
+            }),
+        );
+        assert_eq!(column(&data, "low"), vec![Some("1.1".into()), None, None]);
+        assert_eq!(column(&data, "high"), vec![Some("1.5".into()), None, None]);
     }
 
     #[test]

@@ -193,6 +193,28 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_extract_regex_patterns_fail_at_load() {
+        let json = r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {
+                "p": {
+                    "fileType": "csv",
+                    "resourceType": "Patient",
+                    "groupByKey": "mrn",
+                    "tasks": [{
+                        "task": "extract_regex",
+                        "column": "range",
+                        "pattern": "([unclosed",
+                        "target_columns": ["low"]
+                    }]
+                }
+            }
+        }"#;
+        let error = Contract::load(json).unwrap_err().to_string();
+        assert!(error.contains("extract_regex pattern"), "{error}");
+    }
+
+    #[test]
     fn test_task_comments_are_accepted() {
         let json = r#"{
             "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},

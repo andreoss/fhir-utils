@@ -204,6 +204,7 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 | `convert_to_list` | `column`, `separator` default `,`
 | `copy_columns` | `columns`, `target_column`, `value_separator`
 | `derive_resource_id` | `column`; fills empty `resourceInternalId` with a name-based UUID of it
+| `extract_regex` | `column`, `pattern`, `target_columns`; capture groups land in the targets, no match leaves them null
 | `filter_to_columns` | `source_column`, `target_columns`, `filters`
 | `find_not_null_value` | `columns`, `target_column`
 | `format_date` | `columns`, `date_format`
