@@ -258,8 +258,11 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
     let mut summary = ConvertSummary::default();
     let mut bundles: std::collections::BTreeMap<String, Vec<Value>> =
         std::collections::BTreeMap::new();
-    let mut seen_ids: std::collections::HashSet<(String, String)> =
+    let mut bundle_index: HashMap<(String, String), (String, usize)> = HashMap::new();
+    let mut written_paths: HashMap<(String, String), PathBuf> = HashMap::new();
+    let mut seen_remote: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
+    let remote_output = opener::scheme(&output.to_string_lossy()).is_some();
 
     for input in inputs {
         let stem = file_stem(&input);
@@ -306,28 +309,48 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 let resource_type = resource
                     .get("resourceType")
                     .and_then(|value| value.as_str())
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    .to_string();
                 let id = resource
                     .get("id")
                     .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                if !id.is_empty() && !seen_ids.insert((resource_type.to_string(), id.to_string())) {
-                    summary.deduplicated += 1;
-                    continue;
+                    .unwrap_or_default()
+                    .to_string();
+                let key = (resource_type, id);
+                if !key.1.is_empty() {
+                    if remote_output && request.bundle.is_none() {
+                        if !seen_remote.insert(key.clone()) {
+                            summary.deduplicated += 1;
+                            continue;
+                        }
+                    } else if let Some((group, index)) = bundle_index.get(&key) {
+                        let earlier = &mut bundles.get_mut(group).unwrap()[*index];
+                        merge_duplicate(earlier, &resource, &key);
+                        summary.deduplicated += 1;
+                        continue;
+                    } else if let Some(path) = written_paths.get(&key) {
+                        merge_into_file(&*writer, path, &resource, &key)?;
+                        summary.deduplicated += 1;
+                        continue;
+                    }
                 }
                 if request.bundle.is_some() {
-                    bundles
-                        .entry(row.group_by_key.clone())
-                        .or_default()
-                        .push(resource);
+                    let entries = bundles.entry(row.group_by_key.clone()).or_default();
+                    if !key.1.is_empty() {
+                        bundle_index.insert(key, (row.group_by_key.clone(), entries.len()));
+                    }
+                    entries.push(resource);
                 } else {
-                    write_resource(
+                    let path = write_resource(
                         &*writer,
                         &request.output,
                         &row.group_by_key,
                         &resource,
                         &mut counters,
                     )?;
+                    if !key.1.is_empty() && !remote_output {
+                        written_paths.insert(key, path);
+                    }
                 }
                 summary.resources += 1;
             }
@@ -395,6 +418,64 @@ fn write_bundle(
         ))
     })?;
     Ok(path)
+}
+
+/// Deep-merges a duplicate into the resource seen earlier: objects merge,
+/// arrays union, a conflicting scalar keeps the first value and warns.
+fn merge_duplicate(base: &mut Value, incoming: &Value, key: &(String, String)) {
+    if merge_values(base, incoming) {
+        warn!(
+            resource_type = %key.0,
+            id = %key.1,
+            "duplicate resource carries conflicting values; the first value wins"
+        );
+    }
+}
+
+fn merge_values(base: &mut Value, incoming: &Value) -> bool {
+    match (base, incoming) {
+        (Value::Object(base), Value::Object(incoming)) => {
+            let mut conflict = false;
+            for (name, value) in incoming {
+                match base.get_mut(name) {
+                    Some(existing) => conflict |= merge_values(existing, value),
+                    None => {
+                        base.insert(name.clone(), value.clone());
+                    }
+                }
+            }
+            conflict
+        }
+        (Value::Array(base), Value::Array(incoming)) => {
+            for item in incoming {
+                if !base.contains(item) {
+                    base.push(item.clone());
+                }
+            }
+            false
+        }
+        (base, incoming) => *base != *incoming,
+    }
+}
+
+fn merge_into_file(
+    writer: &dyn Opener,
+    path: &Path,
+    incoming: &Value,
+    key: &(String, String),
+) -> Result<(), Error> {
+    let content = fs::read_to_string(path).map_err(|error| {
+        Error::Config(format!(
+            "cannot reread {} to merge a duplicate: {error}",
+            path.display()
+        ))
+    })?;
+    let mut base: Value = serde_json::from_str(&content)?;
+    merge_duplicate(&mut base, incoming, key);
+    let mut sink = writer.create(&path.to_string_lossy())?;
+    sink.write_all(format!("{}\n", serde_json::to_string_pretty(&base)?).as_bytes())?;
+    sink.flush()?;
+    Ok(())
 }
 
 fn build_bundle(bundle_type: &str, resources: Vec<Value>) -> Value {
@@ -727,6 +808,78 @@ mod tests {
             fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
         let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(patient["name"][0]["family"], json!("Renamed"));
+    }
+
+    #[test]
+    fn merge_values_unions_arrays_and_keeps_the_first_scalar() {
+        let mut base = json!({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "female",
+            "name": [{"family": "Smith"}]
+        });
+        let incoming = json!({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "birthDate": "1980-01-02",
+            "name": [{"family": "Smith"}, {"family": "Jones"}]
+        });
+        let conflict = merge_values(&mut base, &incoming);
+        assert!(conflict);
+        assert_eq!(base["gender"], json!("female"));
+        assert_eq!(base["birthDate"], json!("1980-01-02"));
+        assert_eq!(
+            base["name"],
+            json!([{"family": "Smith"}, {"family": "Jones"}])
+        );
+    }
+
+    #[test]
+    fn duplicate_patient_rows_merge_their_fields() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("input/patient.csv"),
+            "patientInternalId,nameLast,gender\np1,Smith,\np1,,female\n",
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let summary = run_convert(&ConvertRequest::directory(base.path(), output.path())).unwrap();
+        assert_eq!(summary.deduplicated, 1);
+
+        let content =
+            fs::read_to_string(output.path().join("p1/p1-Patient-patient-00001.json")).unwrap();
+        let patient: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(patient["name"][0]["family"], json!("Smith"));
+        assert_eq!(patient["gender"], json!("female"));
+    }
+
+    #[test]
+    fn duplicates_merge_inside_bundles_too() {
+        let base = base_directory();
+        fs::write(
+            base.path().join("input/patient.csv"),
+            "patientInternalId,nameLast,gender\np1,Smith,\np1,,female\n",
+        )
+        .unwrap();
+        let output = TempDir::new().unwrap();
+
+        let request = ConvertRequest::directory(base.path(), output.path()).bundled("collection");
+        let summary = run_convert(&request).unwrap();
+        assert_eq!(summary.deduplicated, 1);
+
+        let content = fs::read_to_string(output.path().join("p1/p1-Bundle.json")).unwrap();
+        let bundle: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let patients: Vec<&serde_json::Value> = bundle["entry"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["resource"]["resourceType"] == json!("Patient"))
+            .collect();
+        assert_eq!(patients.len(), 1);
+        assert_eq!(patients[0]["resource"]["gender"], json!("female"));
+        assert_eq!(patients[0]["resource"]["name"][0]["family"], json!("Smith"));
     }
 
     #[test]
