@@ -315,6 +315,29 @@ converter fills these so the output loads into a server:
 Map the real column whenever the source has one; the defaults keep output valid, they do
 not carry clinical meaning.
 
+== Error codes
+
+Fatal errors print `error E<code>: <message>`. Codes are stable and grouped by
+phase; message text may change between releases.
+
+[cols="1,3"]
+|===
+| Code | Meaning
+| `E1101` | invalid time zone
+| `E1102` | invalid stream type
+| `E1103` | unknown resource type
+| `E1104` | fixed width without name/width headers
+| `E1105` | unknown task
+| `E1106` | unknown task parameter
+| `E1107` | missing task parameter
+| `E1108` | contract or configuration error
+| `E1109` | no file definition matched
+| `E1201` | input parsing failed
+| `E1202` | file system error
+| `E1301` | row or output conversion failed
+| `E1401` | JSON serialization failed
+|===
+
 == Errors and strict mode
 
 [cols="1,2"]

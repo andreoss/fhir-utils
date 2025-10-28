@@ -110,7 +110,7 @@ fn main() {
     };
 
     if let Err(error) = result {
-        eprintln!("{error}");
+        eprintln!("error E{}: {error}", error.code());
         process::exit(1);
     }
 }

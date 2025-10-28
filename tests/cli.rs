@@ -42,7 +42,9 @@ fn validate_print_round_trips_the_resolved_contract() {
 fn validate_rejects_an_invalid_timezone() {
     let output = validate("invalid_timezone.json");
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("timezone"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("timezone"));
+    assert!(stderr.contains("E1101"), "{stderr}");
 }
 
 #[test]
