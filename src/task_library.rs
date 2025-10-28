@@ -331,25 +331,44 @@ fn mapped_value(
     }
 }
 
-/// Fills empty `resourceInternalId` cells with a name-based UUID of the given
-/// column, so re-running a load yields the same resource ids.
+/// Fills empty `resourceInternalId` cells with a name-based UUID seeded by the
+/// resource type and the given column values, so re-running a load yields the
+/// same resource ids and different key columns can compose a hierarchical seed.
 fn derive_resource_id(
     batch: &mut RecordBatch,
     params: &HashMap<String, Value>,
 ) -> Result<(), Error> {
-    let column = string_param(params, "derive_resource_id", "column")?;
-    if !batch.columns.contains_key(column) {
+    let columns = match params.get("column") {
+        Some(Value::String(column)) => vec![column.clone()],
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_str().map(String::from))
+            .collect(),
+        _ => return Err(missing("derive_resource_id", "column")),
+    };
+    if columns.is_empty()
+        || !columns
+            .iter()
+            .all(|column| batch.columns.contains_key(column))
+    {
         return Ok(());
     }
     let mut values = Vec::with_capacity(batch.row_count);
     for row in 0..batch.row_count {
         let current = cell(batch, "resourceInternalId", row).map(|value| value.to_string());
-        values.push(match current {
-            Some(id) if !id.is_empty() => Some(id),
-            _ => cell(batch, column, row).map(|key| {
-                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, key.as_bytes()).to_string()
-            }),
-        });
+        if let Some(id) = current.filter(|id| !id.is_empty()) {
+            values.push(Some(id));
+            continue;
+        }
+        let parts: Vec<&str> = columns
+            .iter()
+            .filter_map(|column| cell(batch, column, row))
+            .collect();
+        values.push((parts.len() == columns.len()).then(|| {
+            let resource_type = cell(batch, "configResourceType", row).unwrap_or_default();
+            let seed = format!("{resource_type}:{}", parts.join(":"));
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, seed.as_bytes()).to_string()
+        }));
     }
     set_column(batch, "resourceInternalId", values);
     Ok(())
@@ -1417,6 +1436,7 @@ mod tests {
     fn derive_resource_id_fills_empty_ids_deterministically() {
         let mut data = batch(&[
             ("mrn", &[Some("m1"), Some("m1"), Some("m2"), None]),
+            ("configResourceType", &[Some("Observation"); 4]),
             ("resourceInternalId", &[None, None, Some("kept"), None]),
         ]);
         run(&mut data, "derive_resource_id", json!({"column": "mrn"}));
@@ -1426,13 +1446,38 @@ mod tests {
         assert_eq!(
             ids[0].as_deref(),
             Some(
-                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"m1")
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"Observation:m1")
                     .to_string()
                     .as_str()
             )
         );
         assert_eq!(ids[2].as_deref(), Some("kept"));
         assert_eq!(ids[3], None);
+    }
+
+    #[test]
+    fn derive_resource_id_composes_a_hierarchical_seed() {
+        let mut data = batch(&[
+            ("mrn", &[Some("m1"), Some("m1")]),
+            ("observationCode", &[Some("1234-5"), None]),
+            ("configResourceType", &[Some("Observation"); 2]),
+        ]);
+        run(
+            &mut data,
+            "derive_resource_id",
+            json!({"column": ["mrn", "observationCode"]}),
+        );
+
+        let ids = column(&data, "resourceInternalId");
+        assert_eq!(
+            ids[0].as_deref(),
+            Some(
+                uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"Observation:m1:1234-5")
+                    .to_string()
+                    .as_str()
+            )
+        );
+        assert_eq!(ids[1], None, "a missing seed part derives no id");
     }
 
     #[test]

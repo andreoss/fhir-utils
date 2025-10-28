@@ -1217,7 +1217,8 @@ mod tests {
 
         let ids = read_ids(&first);
         assert_eq!(ids, read_ids(&second));
-        let expected = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"1234-5").to_string();
+        let expected =
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"Observation:1234-5").to_string();
         assert!(ids.contains(&expected), "{ids:?}");
     }
 

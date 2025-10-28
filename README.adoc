@@ -133,7 +133,7 @@ outside that list travels through the pipeline but never reaches the resource.
 | `fileDefinitions.<key>.fileType` | `csv` or `fixed-width` | no
 | `fileDefinitions.<key>.resourceType` | one of the resource keys | yes
 | `fileDefinitions.<key>.groupByKey` | source column that groups the output | yes
-| `fileDefinitions.<key>.idKey` | column whose value derives a stable resource id | no
+| `fileDefinitions.<key>.idKey` | column or list of columns deriving a stable resource id | no
 | `fileDefinitions.<key>.skiprows` | line count to drop from the top, or zero-based line numbers | no
 | `fileDefinitions.<key>.headers` | column names, names with comments, or names with widths | no
 | `fileDefinitions.<key>.tasks` | ordered tasks appended after the default chain | no
@@ -262,8 +262,11 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - Resource ids are generated per run unless the contract maps `resourceInternalId`, so a
   reload creates new ids; the `urn:id:extID` identifier and the `urn:id:source-file-id`
   extension, which carries `<file>:<rowNum>`, stay stable and are the keys to match on.
-- `idKey` names a column whose value is hashed into a name-based UUID that fills an
-  empty `resourceInternalId` after the tasks run, so a reload keeps the same ids.
+- `idKey` names one column or a list of columns whose values, prefixed with the
+  resource type, seed a name-based UUID that fills an empty `resourceInternalId`
+  after the tasks run, so a reload keeps the same ids. A list composes a
+  hierarchical seed such as patient plus code; a row missing any part keeps a
+  generated id.
 - The summary goes to standard output; warnings and errors go to standard error.
 - Warnings print by default; `RUST_LOG=info` adds a line per file naming the definition
   that matched it and, once converted, its row and resource counts.

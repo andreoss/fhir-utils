@@ -149,9 +149,10 @@ impl<'a, R: Read + Seek> Transform<'a, R> {
             tasks.extend(user_tasks.clone());
         }
         if let Some(id_key) = &self.options.file_def.id_key {
+            let columns = Value::Array(id_key.columns().into_iter().map(Value::String).collect());
             tasks.push(crate::contract::Task {
                 task: "derive_resource_id".into(),
-                params: HashMap::from([("column".to_string(), Value::String(id_key.clone()))]),
+                params: HashMap::from([("column".to_string(), columns)]),
             });
         }
         let failures = time_phase(

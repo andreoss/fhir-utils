@@ -48,7 +48,7 @@ pub struct FileDefinition {
     #[serde(rename = "groupByKey")]
     pub group_by_key: Option<String>,
     #[serde(rename = "idKey", default, skip_serializing_if = "Option::is_none")]
-    pub id_key: Option<String>,
+    pub id_key: Option<IdKey>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skiprows: Option<SkipRows>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,6 +81,22 @@ pub enum FileType {
     Csv,
     #[serde(rename = "fixed-width")]
     FixedWidth,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum IdKey {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl IdKey {
+    pub fn columns(&self) -> Vec<String> {
+        match self {
+            IdKey::Single(column) => vec![column.clone()],
+            IdKey::Multiple(columns) => columns.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -363,6 +379,14 @@ impl Contract {
     fn validate_file_definition(&self, matcher: &str, def: &FileDefinition) -> Result<(), Error> {
         if !VALID_RESOURCE_TYPES.contains(&def.resource_type.as_str()) {
             return Err(Error::UnknownResourceType(def.resource_type.clone()));
+        }
+
+        if def.id_key.as_ref().is_some_and(|key| {
+            key.columns().is_empty() || key.columns().iter().any(String::is_empty)
+        }) {
+            return Err(Error::Config(format!(
+                "idKey must name at least one non-empty column for file matcher: {matcher}"
+            )));
         }
 
         if def.value_delimiter.is_empty() {
