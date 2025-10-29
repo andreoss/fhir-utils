@@ -1,6 +1,25 @@
 use crate::fhirutils::builders;
 use crate::fhirutils::identifiers;
 use serde_json::{Map, Value};
+use std::cell::RefCell;
+use std::collections::HashSet;
+
+thread_local! {
+    static REPORTED_CATEGORIES: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// Warns once per resource type and value when a category is not in the display table.
+pub fn report_unknown_category(resource_type: &str, category: &str) {
+    let key = format!("{resource_type}:{category}");
+    let first = REPORTED_CATEGORIES.with(|seen| seen.borrow_mut().insert(key));
+    if first {
+        tracing::warn!(
+            resource_type,
+            category,
+            "category has no display in the table; the resource omits it"
+        );
+    }
+}
 
 pub fn normalized(record: &Value) -> Value {
     let mut record = record.clone();

@@ -60,6 +60,35 @@ fn verbose_prints_phase_timings_on_stderr() {
 }
 
 #[test]
+fn validate_resolves_definitions_next_to_a_bare_contract_name() {
+    let base = tempfile::TempDir::new().unwrap();
+    std::fs::write(
+        base.path().join("data-contract.json"),
+        r#"{
+            "general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {"p": "patient-definition.json"}
+        }"#,
+    )
+    .unwrap();
+    std::fs::write(
+        base.path().join("patient-definition.json"),
+        r#"{"fileType": "csv", "resourceType": "Patient", "groupByKey": "mrn"}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .current_dir(base.path())
+        .args(["validate", "-f", "data-contract.json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn validate_rejects_an_invalid_timezone() {
     let output = validate("invalid_timezone.json");
     assert!(!output.status.success());

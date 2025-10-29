@@ -227,8 +227,9 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - `condition_map` and `code_map` take an inline object or a CSV file with
   `source_value` and `target_value` columns; a `null` or empty target clears the cell.
 - A `.json` map file holds one flat object or many named tables addressed as
-  `file.json#table`; an object target maps a code to a `{code, system, display,
-  text}` concept whose parts land in `<column>System`, `<column>Display` and
+  `file.json#table`; a many-table file used without `#table` fails naming the
+  tables. An object target maps a code to a `{code, system, display, text}`
+  concept whose parts land in `<column>System`, `<column>Display` and
   `<column>Text`. `__default__` works like `default`.
 - A value the code map does not list passes through unchanged, which is reported once per
   file and column; add a `default` entry to control it.
@@ -346,6 +347,7 @@ phase; message text may change between releases.
 | `E1202` | file system error
 | `E1301` | row or output conversion failed
 | `E1401` | JSON serialization failed
+| `E1501` | writing output failed
 |===
 
 == Errors and strict mode

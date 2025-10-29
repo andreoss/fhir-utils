@@ -215,7 +215,9 @@ struct RawContract<'a> {
 fn resolve_definition(raw: &serde_json::value::RawValue) -> Result<FileDefinition, Error> {
     match serde_json::from_str::<String>(raw.get()) {
         Ok(source) => {
-            let content = crate::opener::read_to_string(&source)?;
+            let content = crate::opener::read_to_string(&source).map_err(|error| {
+                Error::Config(format!("cannot read definition {source}: {error}"))
+            })?;
             serde_json::from_str(without_bom(&content)).map_err(|error| explain(&error.to_string()))
         }
         Err(_) => serde_json::from_str(raw.get()).map_err(|error| explain(&error.to_string())),
@@ -230,7 +232,9 @@ fn resolve_code_systems(value: Option<&serde_json::Value>) -> Result<Vec<(String
     let value = match value {
         None => return Ok(Vec::new()),
         Some(serde_json::Value::String(source)) => {
-            let content = crate::opener::read_to_string(source)?;
+            let content = crate::opener::read_to_string(source).map_err(|error| {
+                Error::Config(format!("cannot read codeSystems file {source}: {error}"))
+            })?;
             serde_json::from_str(without_bom(&content)).map_err(|error| {
                 Error::Config(format!(
                     "codeSystems file {source} is not valid JSON: {error}"
@@ -371,6 +375,15 @@ impl Contract {
     }
 
     fn validate_file_definitions(&self) -> Result<(), Error> {
+        if self.general.regex_filenames {
+            for matcher in self.file_definitions.keys() {
+                regex::Regex::new(matcher).map_err(|error| {
+                    Error::Config(format!(
+                        "invalid regex file definition pattern {matcher}: {error}"
+                    ))
+                })?;
+            }
+        }
         for (matcher, def) in &self.file_definitions {
             self.validate_file_definition(matcher, def)?;
         }
@@ -552,7 +565,92 @@ impl Contract {
             }
         }
 
+        if task_name == "validate_value" {
+            if let Some(pattern) = params.get("regex").and_then(|v| v.as_str()) {
+                regex::Regex::new(pattern).map_err(|error| {
+                    Error::Config(format!("validate_value regex is invalid: {error}"))
+                })?;
+            }
+        }
+
+        if task_name == "build_object_array" {
+            let entry_class = params
+                .get("entry_class")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            if !crate::task_library::ENTRY_CLASSES
+                .iter()
+                .any(|(name, _)| *name == entry_class)
+            {
+                return Err(Error::Config(format!(
+                    "build_object_array.entry_class {entry_class} is unknown; accepted: {}",
+                    crate::task_library::ENTRY_CLASSES
+                        .iter()
+                        .map(|(name, _)| *name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )));
+            }
+        }
+
+        if task_name == "compare_to_date" {
+            const COMPARISONS: &[&str] = &[
+                "DATE_OR_BEFORE",
+                "LE",
+                "BEFORE_DATE",
+                "LT",
+                "EQUALS",
+                "EQ",
+                "DATE_OR_AFTER",
+                "GE",
+                "AFTER_DATE",
+                "GT",
+                "NOT_EQUALS",
+                "NE",
+            ];
+            if let Some(comparison) = params.get("comparison").and_then(|value| value.as_str()) {
+                if !COMPARISONS.contains(&comparison.to_ascii_uppercase().as_str()) {
+                    return Err(Error::Config(format!(
+                        "compare_to_date.comparison {comparison} is unknown; accepted: {}",
+                        COMPARISONS.join(", ")
+                    )));
+                }
+            }
+            if let Some(compare_date) = params.get("compare_date").and_then(|value| value.as_str())
+            {
+                if !compare_date.eq_ignore_ascii_case("TODAY") {
+                    let parsed =
+                        crate::fhirutils::builders::date(compare_date).is_some_and(|date| {
+                            chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").is_ok()
+                        });
+                    if !parsed {
+                        return Err(Error::Config(format!(
+                            "compare_to_date.compare_date {compare_date} is not a date or TODAY"
+                        )));
+                    }
+                }
+            }
+        }
+
         if task_name == "join_data" {
+            if let Some(join_type) = params.get("join_type").and_then(|v| v.as_str()) {
+                const JOIN_TYPES: &[&str] = &["left", "inner", "right", "outer"];
+                if !JOIN_TYPES.contains(&join_type.to_ascii_lowercase().as_str()) {
+                    return Err(Error::Config(format!(
+                        "join_data.join_type {join_type} is unknown; accepted: {}",
+                        JOIN_TYPES.join(", ")
+                    )));
+                }
+            }
+            if let Some(source_type) = params.get("source_type").and_then(|v| v.as_str()) {
+                const SOURCE_TYPES: &[&str] = &["csv", "fixed-width"];
+                if !SOURCE_TYPES.contains(&source_type) {
+                    return Err(Error::Config(format!(
+                        "join_data.source_type {source_type} is unknown; accepted: {}",
+                        SOURCE_TYPES.join(", ")
+                    )));
+                }
+            }
             if let Some(reader_params) = params.get("reader_params").and_then(|v| v.as_object()) {
                 const KNOWN: &[&str] = &["valueDelimiter", "sep", "skiprows", "headers"];
                 for key in reader_params.keys() {
@@ -562,6 +660,29 @@ impl Contract {
                             KNOWN.join(", ")
                         )));
                     }
+                }
+                for key in ["valueDelimiter", "sep"] {
+                    if let Some(value) = reader_params.get(key) {
+                        if value.as_str().map_or(true, str::is_empty) {
+                            return Err(Error::Config(format!(
+                                "join_data.reader_params.{key} must be a non-empty string"
+                            )));
+                        }
+                    }
+                }
+                if let Some(skiprows) = reader_params.get("skiprows") {
+                    serde_json::from_value::<SkipRows>(skiprows.clone()).map_err(|error| {
+                        Error::Config(format!(
+                            "join_data.reader_params.skiprows is invalid: {error}"
+                        ))
+                    })?;
+                }
+                if let Some(headers) = reader_params.get("headers") {
+                    serde_json::from_value::<Headers>(headers.clone()).map_err(|error| {
+                        Error::Config(format!(
+                            "join_data.reader_params.headers is invalid: {error}"
+                        ))
+                    })?;
                 }
             }
         }
@@ -809,6 +930,50 @@ mod maintenance_tests {
         .unwrap_err()
         .to_string();
         assert!(message.contains("line number or a list"), "{message}");
+    }
+
+    fn task_contract(task: serde_json::Value) -> Result<Contract, crate::error::Error> {
+        let body = r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+                "fileDefinitions": {"p": {"fileType": "csv", "resourceType": "Observation",
+                    "groupByKey": "mrn", "tasks": [TASK]}}}"#;
+        Contract::load(&body.replace("TASK", &task.to_string()))
+    }
+
+    #[test]
+    fn task_values_are_validated_when_the_contract_loads() {
+        let cases = [
+            serde_json::json!({"task": "validate_value", "column_name": "v", "regex": "("}),
+            serde_json::json!({"task": "build_object_array", "entry_class": "Nope",
+                "target_column": "t", "entries": []}),
+            serde_json::json!({"task": "compare_to_date", "column": "d",
+                "target_column": "t", "comparison": "SOMETIME"}),
+            serde_json::json!({"task": "compare_to_date", "column": "d",
+                "target_column": "t", "compare_date": "not-a-date"}),
+            serde_json::json!({"task": "join_data", "secondary_data_source": "s.csv",
+                "join_type": "cross", "join_on": "mrn"}),
+            serde_json::json!({"task": "join_data", "secondary_data_source": "s.csv",
+                "join_type": "left", "join_on": "mrn", "source_type": "parquet"}),
+            serde_json::json!({"task": "join_data", "secondary_data_source": "s.csv",
+                "join_type": "left", "join_on": "mrn",
+                "reader_params": {"skiprows": "three"}}),
+        ];
+        for task in cases {
+            let error = task_contract(task.clone()).unwrap_err().to_string();
+            assert!(!error.is_empty(), "accepted invalid task {task}");
+        }
+    }
+
+    #[test]
+    fn an_invalid_regex_file_matcher_is_rejected_at_load() {
+        let error = Contract::load(
+            r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live",
+                    "regexFilenames": true},
+                "fileDefinitions": {"p(": {"fileType": "csv", "resourceType": "Patient",
+                    "groupByKey": "mrn"}}}"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("regex"), "{error}");
     }
 
     #[test]

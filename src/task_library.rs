@@ -20,7 +20,7 @@ thread_local! {
 
 pub const LIST_SEPARATOR: char = '|';
 
-const ENTRY_CLASSES: &[(&str, &[&str])] = &[
+pub const ENTRY_CLASSES: &[(&str, &[&str])] = &[
     (
         "EncounterStatusHistoryEntry",
         &["status", "start_time", "end_time"],
@@ -320,7 +320,21 @@ fn read_json_map(file: &str, table: Option<&str>) -> Result<Map<String, Value>, 
         .as_object()
         .ok_or_else(|| Error::Config(format!("map file {file} must hold a JSON object")))?;
     match table {
-        None => Ok(entries.clone()),
+        None => {
+            if entries.values().any(|value| match value {
+                Value::Object(fields) => !fields
+                    .keys()
+                    .all(|key| matches!(key.as_str(), "code" | "system" | "display" | "text")),
+                _ => false,
+            }) {
+                let tables: Vec<&str> = entries.keys().map(String::as_str).collect();
+                return Err(Error::Config(format!(
+                    "map file {file} holds named tables; address one as {file}#<table>; tables: {}",
+                    tables.join(", ")
+                )));
+            }
+            Ok(entries.clone())
+        }
         Some(table) => match entries.get(table).and_then(|value| value.as_object()) {
             Some(entries) => Ok(entries.clone()),
             None => {
@@ -819,7 +833,13 @@ fn map_codes(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result
         if !batch.columns.contains_key(column) {
             continue;
         }
-        let mapping = resolve_map(mapping, "map_codes", "code_map")?;
+        let mut mapping = resolve_map(mapping, "map_codes", "code_map")?;
+        if let (Some(fallback), false) = (
+            params.get("default"),
+            mapping.contains_key("default") || mapping.contains_key("__default__"),
+        ) {
+            mapping.insert("default".into(), fallback.clone());
+        }
         let has_default = mapping.contains_key("default") || mapping.contains_key("__default__");
         let mut values = Vec::with_capacity(batch.row_count);
         let mut unmapped: Vec<String> = Vec::new();
@@ -1800,6 +1820,25 @@ mod tests {
     }
 
     #[test]
+    fn a_top_level_default_supplies_the_code_map_fallback() {
+        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[
+            ("sex", &[Some("M"), Some("Z")]),
+            ("filePath", &[Some("c.csv")]),
+        ]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male"}}, "default": "unknown"}),
+        );
+        assert_eq!(
+            column(&data, "sex"),
+            vec![Some("male".into()), Some("unknown".into())]
+        );
+        assert!(REPORTED_UNMAPPED.with(|seen| seen.borrow().is_empty()));
+    }
+
+    #[test]
     fn map_codes_maps_column_values() {
         let mut data = batch(&[("sex", &[Some("M"), Some("Z")])]);
         run(
@@ -2024,6 +2063,10 @@ mod tests {
                 br#"{"Gender": {"F": "female"}, "Ward": {"W1": "West"}}"#.to_vec(),
             ),
             ("flat.json".into(), br#"{"F": "female"}"#.to_vec()),
+            (
+                "concept.json".into(),
+                br#"{"F": {"code": "female", "system": "urn:id:sex"}}"#.to_vec(),
+            ),
         ])));
 
         let mut by_table = batch(&[("gender", &[Some("F")])]);
@@ -2047,6 +2090,24 @@ mod tests {
             .to_string();
         assert!(error.contains("no table Missing"), "{error}");
         assert!(error.contains("Gender, Ward"), "{error}");
+
+        let error = crate::task_library::read_map_file("maps.json")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("named tables"), "{error}");
+        assert!(error.contains("maps.json#<table>"), "{error}");
+
+        let mut concept = batch(&[("gender", &[Some("F")])]);
+        run(
+            &mut concept,
+            "map_codes",
+            json!({"code_map": {"gender": "concept.json"}}),
+        );
+        assert_eq!(column(&concept, "gender"), vec![Some("female".into())]);
+        assert_eq!(
+            column(&concept, "genderSystem"),
+            vec![Some("urn:id:sex".into())]
+        );
 
         crate::opener::set_opener(previous);
     }

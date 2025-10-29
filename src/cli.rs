@@ -191,9 +191,19 @@ fn load_contract(request: &ConvertRequest, config_dir: &Path) -> Result<Contract
     });
     opener::set_opener(source_opener);
     let contract_text = if remote_config {
-        opener::read_to_string(&contract_path.to_string_lossy())?
+        opener::read_to_string(&contract_path.to_string_lossy()).map_err(|error| {
+            Error::Config(format!(
+                "cannot read contract {}: {error}",
+                contract_path.display()
+            ))
+        })?
     } else {
-        fs::read_to_string(&contract_path)?
+        fs::read_to_string(&contract_path).map_err(|error| {
+            Error::Config(format!(
+                "cannot read contract {}: {error}",
+                contract_path.display()
+            ))
+        })?
     };
     if let Some(expected) = &request.contract_digest {
         use sha2::Digest as _;
@@ -252,7 +262,7 @@ pub fn run_transform(
                 return Err(input_failure(&file_path, &row.group_by_key, error));
             }
             writeln!(out, "{}", serde_json::to_string(&row.record)?)
-                .map_err(|error| Error::Config(format!("cannot write a record: {error}")))?;
+                .map_err(|error| Error::Write(format!("cannot write a record: {error}")))?;
         }
     }
     Ok(summary)
@@ -548,7 +558,7 @@ fn write_bundle(
         Ok(())
     };
     write(&path).map_err(|error| {
-        Error::Config(format!(
+        Error::Write(format!(
             "cannot write {} for group key {group_by_key}: {error}",
             path.display()
         ))
@@ -601,7 +611,7 @@ fn merge_into_file(
     key: &(String, String),
 ) -> Result<(), Error> {
     let content = fs::read_to_string(path).map_err(|error| {
-        Error::Config(format!(
+        Error::Write(format!(
             "cannot reread {} to merge a duplicate: {error}",
             path.display()
         ))
@@ -684,7 +694,8 @@ fn resolve_inputs(request: &ConvertRequest) -> Result<(Vec<PathBuf>, PathBuf), E
             file.display()
         )));
     }
-    if !config_dir.is_dir() {
+    let remote_config = opener::scheme(&config_dir.to_string_lossy()).is_some();
+    if !remote_config && !config_dir.is_dir() {
         return Err(Error::Config(format!(
             "directory not found: {}",
             config_dir.display()
@@ -724,7 +735,10 @@ pub fn safe_file_id(resource: &Value) -> String {
         .and_then(|value| value.as_str())
         .unwrap_or_default();
 
-    let without_row = source_file_id.split(':').next().unwrap_or_default();
+    let without_row = match source_file_id.rsplit_once(':') {
+        Some((file, row)) if !row.is_empty() && row.chars().all(|c| c.is_ascii_digit()) => file,
+        _ => source_file_id,
+    };
     let without_extension = without_row.split(".csv").next().unwrap_or(without_row);
     without_extension
         .chars()
@@ -785,7 +799,7 @@ fn write_resource(
         Ok(())
     };
     write(&path).map_err(|error| {
-        Error::Config(format!(
+        Error::Write(format!(
             "cannot write {} for group key {group_by_key}: {error}",
             path.display()
         ))
@@ -841,6 +855,12 @@ mod tests {
         });
         assert_eq!(safe_file_id(&resource), "patient_data");
         assert_eq!(safe_file_id(&json!({})), "");
+        let colon = json!({
+            "meta": {"extension": [
+                {"url": constants::EXT_META_SOURCE_FILE_ID, "valueString": "a:b.csv:00001"}
+            ]}
+        });
+        assert_eq!(safe_file_id(&colon), "a_b");
     }
 
     #[test]
@@ -1478,5 +1498,43 @@ mod tests {
             .path()
             .join("p1/p1-Patient-patient-00002.json")
             .exists());
+    }
+
+    #[test]
+    fn a_scheme_config_directory_is_not_rejected_as_missing() {
+        let base = base_directory();
+        let output = TempDir::new().unwrap();
+        let request = ConvertRequest::single_file(
+            base.path().join("input/patient.csv"),
+            "https://127.0.0.1:1/config",
+            output.path().to_path_buf(),
+        );
+        let error = run_convert(&request).unwrap_err().to_string();
+        assert!(
+            !error.contains("directory not found"),
+            "a scheme config directory must reach the opener: {error}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn a_failing_output_opener_reports_a_write_code() {
+        struct Unwritable;
+
+        impl crate::opener::Opener for Unwritable {
+            fn open(&self, source: &str) -> Result<Box<dyn crate::opener::Source>, Error> {
+                Err(Error::Config(format!("no source: {source}")))
+            }
+
+            fn create(&self, target: &str) -> Result<Box<dyn crate::opener::Sink>, Error> {
+                Err(Error::Config(format!("no sink: {target}")))
+            }
+        }
+
+        let base = base_directory();
+        let request = ConvertRequest::directory(base.path(), Path::new("fail://out"))
+            .with_opener(Arc::new(Unwritable));
+        let error = run_convert(&request).unwrap_err();
+        assert_eq!(error.code(), 1501);
     }
 }

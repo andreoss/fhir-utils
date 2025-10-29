@@ -178,6 +178,13 @@ fn live_extract_covers_every_input_shape() {
         .find(|value| value["resourceType"] == "Patient" && value["id"] == "p3")
         .unwrap();
     assert_eq!(last_name_only["name"][0]["family"], "Solo");
+
+    let partial = produced
+        .values()
+        .find(|value| value["resourceType"] == "Patient" && value["id"] == "p4")
+        .unwrap();
+    assert_eq!(partial["birthDate"], "1985");
+    assert_eq!(partial["deceasedDateTime"], "1985-06");
 }
 
 #[test]
@@ -224,7 +231,7 @@ fn regex_file_matching_selects_definitions() {
     ))
     .unwrap();
     assert_eq!(summary.files, 1);
-    assert_eq!(summary.resources, 2);
+    assert_eq!(summary.resources, 3);
 }
 
 #[test]

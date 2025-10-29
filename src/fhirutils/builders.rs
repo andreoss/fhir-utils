@@ -263,11 +263,11 @@ pub fn datetime(value: &str, zone: Option<&str>) -> Option<String> {
     }
 
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
-        return Some(parsed.to_rfc3339_opts(SecondsFormat::Secs, false));
+        return Some(parsed.to_rfc3339_opts(SecondsFormat::AutoSi, false));
     }
     for format in DATE_TIME_OFFSET_FORMATS {
         if let Ok(parsed) = chrono::DateTime::parse_from_str(value, format) {
-            return Some(parsed.to_rfc3339_opts(SecondsFormat::Secs, false));
+            return Some(parsed.to_rfc3339_opts(SecondsFormat::AutoSi, false));
         }
     }
 
@@ -277,11 +277,11 @@ pub fn datetime(value: &str, zone: Option<&str>) -> Option<String> {
         Some(zone) => zone
             .from_local_datetime(&naive)
             .earliest()
-            .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            .map(|value| value.to_rfc3339_opts(SecondsFormat::AutoSi, false)),
         None => Some(
             chrono::Utc
                 .from_utc_datetime(&naive)
-                .to_rfc3339_opts(SecondsFormat::Secs, false),
+                .to_rfc3339_opts(SecondsFormat::AutoSi, false),
         ),
     }
 }
@@ -746,7 +746,7 @@ mod tests {
     fn datetime_accepts_fractional_seconds_and_compact_minutes() {
         assert_eq!(
             datetime("2021-06-01 10:00:00.500", Some("UTC")).unwrap(),
-            "2021-06-01T10:00:00+00:00"
+            "2021-06-01T10:00:00.500+00:00"
         );
         assert_eq!(
             datetime("202106011000", Some("UTC")).unwrap(),

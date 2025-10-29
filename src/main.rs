@@ -168,15 +168,19 @@ fn run_validate(file: &str, print: bool) -> Result<(), Error> {
     let path = PathBuf::from(file);
     let directory = path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty());
-    if let Some(directory) = directory {
-        fhir_utils::opener::set_opener(std::sync::Arc::new(fhir_utils::opener::LocalOpener::new(
-            directory,
-        )));
-    }
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    fhir_utils::opener::set_opener(std::sync::Arc::new(fhir_utils::opener::LocalOpener::new(
+        directory,
+    )));
 
-    let content = fs::read_to_string(&path)
-        .map_err(|error| Error::Config(format!("cannot open {file}: {error}")))?;
+    let content = if fhir_utils::opener::scheme(file).is_some() {
+        fhir_utils::opener::read_to_string(file)
+            .map_err(|error| Error::Config(format!("cannot open {file}: {error}")))?
+    } else {
+        fs::read_to_string(&path)
+            .map_err(|error| Error::Config(format!("cannot open {file}: {error}")))?
+    };
     let contract = Contract::load(&content)?;
     for warning in contract.lint() {
         eprintln!("warning: {warning}");

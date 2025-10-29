@@ -257,7 +257,15 @@ pub fn open_path(path: &Path) -> Result<Box<dyn Source>, Error> {
 
 /// A `.gz` source is inflated into memory so the reader can seek.
 fn decompressed(source: &str, mut raw: Box<dyn Source>) -> Result<Box<dyn Source>, Error> {
-    if !source.to_ascii_lowercase().ends_with(".gz") {
+    let lower = source.to_ascii_lowercase();
+    for extension in [".zip", ".bz2", ".xz", ".zst", ".7z"] {
+        if lower.ends_with(extension) {
+            return Err(Error::Config(format!(
+                "unsupported compression {extension} for {source}; only .gz is accepted"
+            )));
+        }
+    }
+    if !lower.ends_with(".gz") {
         return Ok(raw);
     }
     let mut bytes = Vec::new();
@@ -334,6 +342,20 @@ mod tests {
         let mut content = String::new();
         source.read_to_string(&mut content).unwrap();
         assert_eq!(content, "a,b\n1,2\n");
+    }
+
+    #[test]
+    fn an_unsupported_compression_extension_is_named() {
+        let mut file = tempfile::Builder::new().suffix(".zip").tempfile().unwrap();
+        file.write_all(b"PK").unwrap();
+        file.flush().unwrap();
+
+        let error = match open_path(file.path()) {
+            Ok(_) => panic!("a .zip source must not open as text"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("unsupported compression .zip"), "{error}");
+        assert!(error.contains("only .gz"), "{error}");
     }
 
     #[test]

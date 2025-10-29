@@ -60,16 +60,18 @@ pub fn convert_record(
     );
 
     if let Some(category) = builders::field(&record, "observationCategory") {
-        if let Some(display) = constants::display(constants::OBSERVATION_CATEGORY_DISPLAY, category)
-        {
-            if let Some(concept) = builders::codeable_concept(
-                Some(constants::OBSERVATION_CATEGORY_SYSTEM),
-                Some(category),
-                Some(display),
-                None,
-            ) {
-                common::insert_list(&mut observation, "category", vec![concept]);
+        match constants::display(constants::OBSERVATION_CATEGORY_DISPLAY, category) {
+            Some(display) => {
+                if let Some(concept) = builders::codeable_concept(
+                    Some(constants::OBSERVATION_CATEGORY_SYSTEM),
+                    Some(category),
+                    Some(display),
+                    None,
+                ) {
+                    common::insert_list(&mut observation, "category", vec![concept]);
+                }
             }
+            None => common::report_unknown_category("Observation", category),
         }
     }
 

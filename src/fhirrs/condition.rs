@@ -141,6 +141,7 @@ fn category(record: &Value) -> Option<&str> {
 fn category_concept(category: Option<&str>) -> Option<Value> {
     let category = category?;
     if category != CATEGORY_PROBLEM_LIST && category != CATEGORY_ENCOUNTER_DIAGNOSIS {
+        common::report_unknown_category("Condition", category);
         return None;
     }
     builders::codeable_concept(

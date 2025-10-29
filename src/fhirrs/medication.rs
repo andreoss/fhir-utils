@@ -128,6 +128,7 @@ fn build(
             {
                 let mut linked = Vec::new();
                 let encounter = encounter::build(group_by_key, &record, meta, &mut linked);
+                resources.extend(linked);
                 resources.push(encounter);
             }
         }
@@ -393,6 +394,25 @@ mod tests {
         assert_eq!(resources.len(), 2);
         assert_eq!(resources[0]["resourceType"], json!("Encounter"));
         assert_eq!(resources[1]["resourceType"], json!("MedicationRequest"));
+    }
+
+    #[test]
+    fn a_request_with_encounter_data_keeps_the_linked_resources() {
+        let record = json!({
+            "medicationCode": "1049502",
+            "encounterInternalId": "e1",
+            "encounterClassCode": "AMB",
+            "practitionerInternalId": "pr1",
+            "practitionerNameLast": "House"
+        });
+        let resources = convert_request("g1", &record, &meta()).unwrap();
+        assert!(resources
+            .iter()
+            .any(|resource| resource["resourceType"] == json!("Practitioner")));
+        assert_eq!(
+            resources.last().unwrap()["resourceType"],
+            json!("MedicationRequest")
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
-patientInternalId,mrn,nameLast,nameFirst,gender,birthDate,ssn
-p1,12345,Smith,Ann,F,1980-01-02,123-45-6789
-p2,bad-mrn,Jones,Bob,M,1975-11-30,999-99-9999
+patientInternalId,mrn,nameLast,nameFirst,gender,birthDate,ssn,deceasedDateTime
+p1,12345,Smith,Ann,F,1980-01-02,123-45-6789,
+p2,bad-mrn,Jones,Bob,M,1975-11-30,999-99-9999,
+p4,24680,Partial,Bob,M,1985,,1985-06

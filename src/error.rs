@@ -28,12 +28,14 @@ pub enum Error {
     Conversion(String),
     #[error("file definition not found for: {0}")]
     FileDefinitionNotFound(String),
+    #[error("write error: {0}")]
+    Write(String),
 }
 
 impl Error {
     /// Stable numeric code, grouped by pipeline phase: 11xx contract and
-    /// configuration, 12xx input reading, 13xx conversion, 14xx serialization.
-    /// Codes never change meaning; the message text may.
+    /// configuration, 12xx input reading, 13xx conversion, 14xx serialization,
+    /// 15xx writing. Codes never change meaning; the message text may.
     pub fn code(&self) -> u16 {
         match self {
             Error::InvalidTimezone(_) => 1101,
@@ -49,6 +51,7 @@ impl Error {
             Error::Io(_) => 1202,
             Error::Conversion(_) => 1301,
             Error::Json(_) => 1401,
+            Error::Write(_) => 1501,
         }
     }
 }
@@ -64,5 +67,6 @@ mod tests {
         assert_eq!(Error::Conversion("x".into()).code(), 1301);
         let io = Error::Io(std::io::Error::other("x"));
         assert_eq!(io.code(), 1202);
+        assert_eq!(Error::Write("x".into()).code(), 1501);
     }
 }
