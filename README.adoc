@@ -195,6 +195,27 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - The summary goes to standard output; warnings and errors go to standard error.
 - Warnings print by default; `RUST_LOG=info` adds per-file detail.
 
+== Required field defaults
+
+FHIR requires some fields the source extract may not carry. When a column is absent the
+converter fills these so the output loads into a server:
+
+[cols="2,2,2"]
+|===
+| Resource | Field | Default
+| `Observation`, `Encounter`, `Procedure`, `DiagnosticReport` | `status` | `unknown`
+| `MedicationAdministration`, `MedicationRequest`, `MedicationStatement` | `status` | `unknown`
+| `MedicationRequest` | `intent` | `order`
+| `Immunization` | `status` | `completed`
+| `DocumentReference` | `status` | `current`
+| `AllergyIntolerance` | `clinicalStatus` | `active` unless the verification status is `entered-in-error`
+| `Encounter` | `class` | data absent `temp-unknown`
+| `Immunization` | `occurrence` | `occurrenceString` of `unknown` when no date is given
+|===
+
+Map the real column whenever the source has one; the defaults keep output valid, they do
+not carry clinical meaning.
+
 == Errors and strict mode
 
 [cols="1,2"]

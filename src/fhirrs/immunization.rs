@@ -43,10 +43,9 @@ pub fn convert_record(
     }
     common::insert_list(&mut immunization, "identifier", identifier_values);
 
-    common::insert_str(
-        &mut immunization,
-        "status",
-        builders::field(&record, "immunizationStatus"),
+    immunization.insert(
+        "status".into(),
+        json!(builders::field(&record, "immunizationStatus").unwrap_or("completed")),
     );
     common::insert(&mut immunization, "vaccineCode", vaccine);
     common::insert(
@@ -140,6 +139,13 @@ mod tests {
     use crate::fhirrs::testing::meta;
     use crate::fhirutils::constants;
     use serde_json::json;
+
+    #[test]
+    fn status_defaults_when_the_source_omits_it() {
+        let record = json!({"immunizationVaccineCode": "208"});
+        let immunization = convert_record("g1", &record, &meta()).unwrap().remove(0);
+        assert_eq!(immunization["status"], json!("completed"));
+    }
 
     #[test]
     fn no_vaccine_code_produces_no_resource() {

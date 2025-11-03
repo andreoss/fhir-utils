@@ -7,6 +7,8 @@ use crate::fhirutils::constants;
 use crate::fhirutils::identifiers;
 use serde_json::{json, Map, Value};
 
+const UNKNOWN_STATUS: &str = "unknown";
+
 pub fn convert_record(
     group_by_key: &str,
     record: &Value,
@@ -41,10 +43,9 @@ pub fn convert_record(
         builders::field(&record, "assigningAuthority"),
     );
 
-    common::insert_str(
-        &mut observation,
-        "status",
-        builders::field(&record, "observationStatus"),
+    observation.insert(
+        "status".into(),
+        json!(builders::field(&record, "observationStatus").unwrap_or(UNKNOWN_STATUS)),
     );
     common::insert(&mut observation, "code", code_concept.clone());
     common::insert(
@@ -264,6 +265,13 @@ mod tests {
         json!({"extension": [
             {"url": constants::EXT_META_PROCESS_TIMESTAMP, "valueDateTime": "2020-01-02T03:04:05+00:00"}
         ]})
+    }
+
+    #[test]
+    fn status_defaults_when_the_source_omits_it() {
+        let record = json!({"observationCode": "1234-5"});
+        let observation = convert_record("g1", &record, &meta()).unwrap().remove(0);
+        assert_eq!(observation["status"], json!("unknown"));
     }
 
     #[test]
