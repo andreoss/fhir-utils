@@ -449,3 +449,156 @@ mod external_definition_tests {
         set_opener(previous);
     }
 }
+
+/// Task parameters naming a column the task creates.
+const TARGET_PARAMS: &[&str] = &[
+    "target_column",
+    "split_column_name",
+    "split_value_column_name",
+];
+
+fn written_columns(task: &Task) -> Vec<String> {
+    let mut columns = Vec::new();
+    for param in TARGET_PARAMS {
+        if let Some(serde_json::Value::String(name)) = task.params.get(*param) {
+            columns.push(name.clone());
+        }
+    }
+    match task.task.as_str() {
+        "add_constant" => {
+            if let Some(serde_json::Value::String(name)) = task.params.get("name") {
+                columns.push(name.clone());
+            }
+        }
+        "rename_columns" => {
+            if let Some(serde_json::Value::Object(map)) = task.params.get("column_map") {
+                columns.extend(map.values().filter_map(|to| to.as_str().map(String::from)));
+            }
+        }
+        "split_column" => {
+            if let Some(serde_json::Value::Array(names)) = task.params.get("new_column_names") {
+                columns.extend(names.iter().filter_map(|to| to.as_str().map(String::from)));
+            }
+        }
+        "filter_to_columns" => {
+            if let Some(serde_json::Value::Array(names)) = task.params.get("target_columns") {
+                columns.extend(names.iter().filter_map(|to| to.as_str().map(String::from)));
+            }
+        }
+        _ => {}
+    }
+    columns
+}
+
+fn mentions(value: &serde_json::Value, name: &str) -> bool {
+    match value {
+        serde_json::Value::String(text) => text == name,
+        serde_json::Value::Array(items) => items.iter().any(|item| mentions(item, name)),
+        serde_json::Value::Object(map) => map
+            .iter()
+            .any(|(key, item)| key == name || mentions(item, name)),
+        _ => false,
+    }
+}
+
+/// Warns about task targets that neither a later task nor the resource reads.
+pub fn lint_definition(definition: &FileDefinition) -> Vec<String> {
+    let Some(tasks) = definition.tasks.as_deref() else {
+        return Vec::new();
+    };
+    if crate::fhirrs::fields::fields_for(&definition.resource_type).is_none() {
+        return Vec::new();
+    }
+
+    let mut warnings = Vec::new();
+    for (index, task) in tasks.iter().enumerate() {
+        for column in written_columns(task) {
+            if crate::fhirrs::fields::is_known(&definition.resource_type, &column)
+                || definition.group_by_key.as_deref() == Some(column.as_str())
+                || tasks[index + 1..]
+                    .iter()
+                    .any(|later| later.params.values().any(|value| mentions(value, &column)))
+            {
+                continue;
+            }
+            warnings.push(format!(
+                "task {} {} writes \"{column}\", which no {} field reads",
+                index + 1,
+                task.task,
+                definition.resource_type
+            ));
+        }
+    }
+    warnings
+}
+
+impl Contract {
+    /// Contract problems that do not stop a run, one message per file definition.
+    pub fn lint(&self) -> Vec<String> {
+        let mut keys: Vec<&String> = self.file_definitions.keys().collect();
+        keys.sort();
+        keys.into_iter()
+            .flat_map(|key| {
+                lint_definition(&self.file_definitions[key])
+                    .into_iter()
+                    .map(move |warning| format!("{key}: {warning}"))
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod lint_tests {
+    use crate::contract::Contract;
+
+    fn contract(tasks: &str) -> Contract {
+        Contract::load(&format!(
+            r#"{{"general": {{"timeZone": "UTC", "tenantId": "t1", "streamType": "live"}},
+                "fileDefinitions": {{"labs": {{"fileType": "csv", "resourceType": "Observation",
+                    "groupByKey": "MRN", "tasks": {tasks}}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_misspelled_rename_target_is_reported() {
+        let warnings =
+            contract(r#"[{"task": "rename_columns", "column_map": {"V": "observationVallue"}}]"#)
+                .lint();
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("observationVallue"), "{warnings:?}");
+        assert!(
+            warnings[0].contains("labs: task 1 rename_columns"),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn a_correct_rename_target_is_quiet() {
+        let warnings = contract(
+            r#"[{"task": "rename_columns", "column_map": {"V": "observationValue", "M": "MRN"}}]"#,
+        )
+        .lint();
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn an_intermediate_column_read_by_a_later_task_is_quiet() {
+        let warnings = contract(
+            r#"[{"task": "add_constant", "name": "scratch", "value": "x"},
+                {"task": "copy_columns", "columns": ["scratch"], "target_column": "observationCode"}]"#,
+        )
+        .lint();
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_definition_without_tasks_is_quiet() {
+        let contract = Contract::load(
+            r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+                "fileDefinitions": {"labs": {"fileType": "csv", "resourceType": "Observation", "groupByKey": "MRN"}}}"#,
+        )
+        .unwrap();
+        assert!(contract.lint().is_empty());
+    }
+}

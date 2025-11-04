@@ -66,3 +66,37 @@ fn every_command_and_flag_is_documented() {
         assert!(content.contains(item), "readme is missing: {item}");
     }
 }
+
+#[test]
+fn the_record_field_reference_covers_every_model() {
+    let content = readme();
+    assert!(content.contains("== Record fields"));
+    for model in [
+        "Patient",
+        "AllergyIntolerance",
+        "Condition",
+        "Encounter",
+        "Immunization",
+        "Location",
+        "MedicationUse",
+        "Observation",
+        "Organization",
+        "Practitioner",
+        "Procedure",
+        "Basic",
+        "Unstructured",
+    ] {
+        assert!(
+            content.contains(&format!("| {model} | `")),
+            "record model missing from the readme: {model}"
+        );
+    }
+    for field in [
+        "patientInternalId",
+        "observationStatus",
+        "filePath",
+        "rowNum",
+    ] {
+        assert!(content.contains(field), "readme is missing: {field}");
+    }
+}

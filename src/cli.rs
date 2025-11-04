@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone, Default)]
 pub struct ConvertRequest {
@@ -115,6 +115,13 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         .unwrap_or_else(|| Arc::new(LocalOpener::new(config_dir.clone())));
     opener::set_opener(source_opener);
     let contract = Contract::load(&fs::read_to_string(&contract_path)?)?;
+    let warnings = contract.lint();
+    if request.strict && !warnings.is_empty() {
+        return Err(Error::Config(warnings.join("; ")));
+    }
+    for warning in &warnings {
+        warn!("{warning}");
+    }
     let registry = TaskRegistry::new();
     fs::create_dir_all(&request.output)?;
     if fs::read_dir(&request.output)?.next().is_some() {

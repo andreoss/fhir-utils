@@ -107,8 +107,8 @@ out/7654321/7654321-Patient-patients-00001.json
 
 The key `patients` matches the file name `patients.csv`, `groupByKey` names the source
 column because grouping happens before tasks, and `sex.csv` resolves against the
-configuration directory. Target column names follow the internal record model, for
-example `mrn`, `nameLast`, `gender`, `birthDate`, `ssn`.
+configuration directory. Target column names come from the record fields below; a name
+outside that list travels through the pipeline but never reaches the resource.
 
 == Contract
 
@@ -142,6 +142,30 @@ example `mrn`, `nameLast`, `gender`, `birthDate`, `ssn`.
 `Location`, `Organization`, `Practitioner`, `Procedure`, `MedicationUse`,
 `MedicationAdministration`, `MedicationRequest`, `MedicationStatement`,
 `DocumentReference`, `DiagnosticReport`, `Unstructured`, `Basic`.
+
+== Record fields
+
+Task output must use these names; anything else is ignored by the converter. Every row
+also carries `filePath` and `rowNum`. `ssn` is normalized to nine digits without
+dashes and repeated-digit values are rejected. `a -> b` renames `a` to `b`.
+
+[cols="1,4"]
+|===
+| Model | Fields
+| Patient | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `patientSourceRecordId`, `driversLicense`, `driversLicenseSystem`, `mrn`, `assigningAuthority`, `nameFirst`, `nameFirstMiddle`, `nameMiddle`, `nameLast`, `nameFirstMiddleLast`, `prefix`, `suffix`, `birthDate`, `deceasedDateTime`, `deceasedBoolean`, `multipleBirthBoolean`, `multipleBirthInteger`, `address1`, `address2`, `city`, `state`, `postalCode`, `country`, `addressText`, `telecomPhone`, `race`, `raceSystem`, `raceText`, `ethnicity`, `ethnicitySystem`, `ethnicityText`, `gender`, `ageInWeeksForAgeUnder2Years`, `ageInMonthsForAgeUnder8Years`
+| AllergyIntolerance | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `encounterInternalId`, `encounterNumber`, `resourceInternalId`, `assigningAuthority`, `allergySourceRecordId`, `allergyCategory`, `allergyType`, `allergyRecordedDateTime`, `allergyCode`, `allergyCodeSystem`, `allergyCodeText`, `allergyCriticality`, `allergyManifestationCode`, `allergyManifestationSystem`, `allergyManifestationText`, `allergyManifestationCodeList`, `allergyClinicalStatusCode`, `allergyVerificationStatusCode`, `allergyOnsetStartDateTime`, `allergyOnsetEndDateTime`
+| Condition | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `encounterInternalId`, `encounterNumber`, `resourceInternalId`, `assigningAuthority`, `conditionSourceRecordId`, `encounterClaimType`, `conditionCategory`, `conditionRecordedDateTime`, `conditionOnsetDateTime`, `conditionAbatementDateTime`, `conditionClinicalStatus`, `conditionVerificationStatus`, `conditionDiagnosisRank`, `conditionDiagnosisUse`, `conditionCode`, `conditionCodeSystem`, `conditionCodeText`, `conditionSeverityCode`, `conditionSeveritySystem`, `conditionSeverityText`, `conditionChronicity`
+| Encounter | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `encounterNumber`, `resourceInternalId`, `assigningAuthority`, `encounterSourceRecordId`, `encounterStatus`, `encounterClassCode/Text/System`, `encounterPriorityCode/Text/CodeSystem`, `encounterStartDateTime`, `encounterEndDateTime`, `encounterLengthValue`, `encounterLengthUnits`, `encounterReasonCode/System/Text`, `hospitalizationAdmitSourceCode/Text/System`, `hospitalizationReAdmissionCode/Text/System`, `hospitalizationDischargeDispositionCode/Text/System`, `encounterParticipantSequenceId`, `encounterParticipantTypeCode/Text/CodeSystem`, `practitionerInternalId`, `practitionerNPI`, `practitionerNameLast`, `practitionerNameFirst`, `practitionerGender`, `practitionerRoleText`, `practitionerRoleCodes`, `practitionerRoleCodesSystem`, `practitionerSpecialtyCodes`, `practitionerSpecialtyCodesSystem`, `practitionerSpecialtyText`, `encounterLocationSequenceId`, `encounterLocationPeriodStart`, `encounterLocationPeriodEnd`, `locationResourceInternalId`, `locationName`, `locationTypeCode`, `locationTypeText`, `locationTypeCodeSystem`, `encounterStatusHistory`, `encounterInsuredEntryId`, `encounterInsuredRank`, `encounterInsuredCategoryCode/System/Text`, `encounterClaimType`, `encounterDrgCode`
+| Immunization | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `resourceInternalId`, `assigningAuthority`, `immunizationSourceRecordId`, `immunizationDoseQuantity`, `immunizationDoseUnit`, `immunizationDoseText`, `encounterNumber`, `encounterInternalId`, `organizationResourceInternalId`, `organizationName`, `immunizationRouteCode/System/Text`, `immunizationSiteCode/System/Text`, `immunizationStatus`, `immunizationStatusReasonCode/System/Text`, `immunizationVaccineCode/System/Display/Text`, `immunizationVaccineCodeList`, `immunizationDate`, `immunizationExpirationDate`
+| Location | `assigningAuthority`, `locationResourceInternalId` -> `resourceInternalId`, `locationName`, `locationTypeCode`, `locationTypeText`, `locationTypeCodeSystem`
+| MedicationUse | `resourceType`, `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `medicationSourceRecordId`, `encounterInternalId`, `encounterNumber`, `encounterClaimType`, `encounterClassCode`, `resourceInternalId`, `medicationRxNumber`, `assigningAuthority`, `medicationUseStatus`, `medicationUseCategoryCode/System/Text`, `medicationUseOccuranceDateTime`, `medicationCode/Display/System/Text`, `medicationCodeList`, `medicationUseRouteCode/System/Text`, `medicationUseRouteList`, `medicationUseDosageText/Value/Unit`, `medicationValidityStart`, `medicationValidityEnd`, `medicationRefills`, `medicationQuantity`, `medicationAuthoredOn`, `medicationRequestIntent`
+| Observation | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `encounterNumber`, `encounterInternalId`, `resourceInternalId`, `assigningAuthority`, `observationSourceRecordId`, `observationStatus`, `observationCategory`, `observationDateTime`, `practitionerNPI`, `practitionerInternalId`, `observationCode`, `observationCodeSystem`, `observationCodeText`, `observationCodeList`, `observationValue`, `observationValueUnits`, `observationValueDataType`, `observationRefRange`, `observationRefRangeLow`, `observationRefRangeHigh`, `observationRefRangeText`, `observationInterpretationCode/System/Display/Text`
+| Organization | `assigningAuthority`, `organizationResourceInternalId` -> `resourceInternalId`, `organizationName`
+| Practitioner | `assigningAuthority`, `practitionerInternalId` -> `resourceInternalId`, `practitionerNPI` -> `identifier_practitionerNPI`, `practitionerNameLast`, `practitionerNameFirst`, `practitionerNameText`, `practitionerGender`, `practitionerRoleText`, `practitionerRoleCode`, `practitionerRoleCodeList`, `practitionerRoleCodeSystem`, `practitionerSpecialtyCode`, `practitionerSpecialtyCodeList`, `practitionerSpecialtyCodeSystem`, `practitionerSpecialtyText`
+| Procedure | `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `procedureSourceRecordId`, `encounterInternalId`, `encounterNumber`, `encounterClaimType`, `resourceInternalId`, `assigningAuthority`, `procedureStatus`, `procedurePerformedDateTime`, `procedureCategory`, `procedureCategorySystem`, `procedureCategoryText`, `procedureCode/System/Display/Text`, `procedureCodeList`, `procedureModifierList`, `procedureModifierSystem`, `procedureEncounterSequenceId`, `practitionerInternalId`, `practitionerNPI`, `practitionerNameLast`, `practitionerNameFirst`, `practitionerGender`, `practitionerRoleText`, `practitionerRoleCode`, `practitionerRoleCodeSystem`, `practitionerSpecialtyCode`, `practitionerSpecialtyCodeSystem`, `practitionerSpecialtyText`
+| Basic | `baseSystem`, `tokenList`, `patientInternalIdentifier`, `created_date`, `otherIdentifierList`
+| Unstructured | `resourceType`, `patientInternalId`, `accountNumber`, `ssn`, `ssnSystem`, `mrn`, `encounterNumber`, `resourceInternalId`, `encounterInternalId`, `assigningAuthority`, `resourceStatus`, `documentStatus`, `documentTypeCode`, `documentTypeCodeSystem`, `documentTypeCodeText`, `documentDateTime`, `documentAttachmentContentType`, `documentAttachmentContent`, `documentAttachmentTitle`, `practitionerInternalId`, `practitionerNPI`, `practitionerNameLast`, `practitionerNameFirst`
+|===
 
 == Tasks
 
@@ -182,6 +206,9 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
 - `condition_map` and `code_map` take an inline object or a CSV file with
   `source_value` and `target_value` columns; a `null` or empty target clears the cell.
 - Unknown tasks and unknown or missing parameters are rejected when the contract loads.
+- A task target that neither a later task nor the resource reads is reported by
+  `validate` and warned about during `convert`; `--strict` makes it fail the run. It
+  catches a misspelled field name, which otherwise drops the value silently.
 
 == Output
 
@@ -224,6 +251,7 @@ not carry clinical meaning.
 | Contract or validation error | run stops
 | Missing file definition | file skipped
 | Task failure | warning, pipeline continues; fatal with `--strict`
+| Task target no field reads | warning at load; fatal with `--strict`
 | Rows without a group key | warning once per file; fatal with `--strict`
 | Row conversion error | run stops with the group key and file
 |===
