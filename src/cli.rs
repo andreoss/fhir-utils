@@ -156,7 +156,10 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
         };
 
         summary.files += 1;
+        let written = summary.resources;
+        let mut rows = 0usize;
         for row in convert(&input, options)? {
+            rows += 1;
             if let Some(error) = row.exception {
                 return Err(match error {
                     Error::Conversion(_) => error,
@@ -171,6 +174,12 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
                 summary.resources += 1;
             }
         }
+        info!(
+            file = %input.display(),
+            rows,
+            resources = summary.resources - written,
+            "converted"
+        );
     }
 
     Ok(summary)
