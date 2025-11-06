@@ -31,8 +31,7 @@ enum Commands {
         #[arg(
             short = 'f',
             long,
-            requires = "config_dir",
-            help = "Single input file; requires --config-dir"
+            help = "Single input file; needs --config-dir or MAPPING_CONFIG_DIRECTORY"
         )]
         file: Option<PathBuf>,
         #[arg(

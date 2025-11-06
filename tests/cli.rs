@@ -292,3 +292,49 @@ fn a_task_target_no_resource_reads_is_reported() {
     assert!(!strict.status.success());
     assert!(String::from_utf8_lossy(&strict.stderr).contains("nameLastt"));
 }
+
+#[test]
+fn file_mode_falls_back_to_the_configured_contract_directory() {
+    let base = fixture_tree();
+    let output = base.path().join("out");
+    let result = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-f")
+        .arg(base.path().join("input/patient.csv"))
+        .arg("-o")
+        .arg(&output)
+        .env("MAPPING_CONFIG_DIRECTORY", base.path().join("config"))
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(output.join("p1/p1-Patient-patient-00001.json").is_file());
+}
+
+#[test]
+fn an_unusable_output_directory_is_named() {
+    let base = fixture_tree();
+    let blocked = base.path().join("blocked");
+    std::fs::write(&blocked, "not a directory").unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_fhir-utils"))
+        .arg("convert")
+        .arg("-d")
+        .arg(base.path())
+        .arg("-o")
+        .arg(&blocked)
+        .output()
+        .unwrap();
+
+    assert!(!result.status.success());
+    let message = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        message.contains("cannot create output directory"),
+        "{message}"
+    );
+    assert!(message.contains("blocked"), "{message}");
+}
