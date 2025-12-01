@@ -39,6 +39,7 @@ pub struct ConvertedRow {
     pub exception: Option<Error>,
     pub group_by_key: String,
     pub resources: Vec<Value>,
+    pub row_num: usize,
 }
 
 pub struct Transform<'a, R: Read + Seek> {
@@ -192,18 +193,19 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let row = self.transform.next()?;
+        let row_num = builders::field(&row.record, "rowNum")
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_default();
 
         if let Some(error) = row.exception {
             return Some(ConvertedRow {
                 exception: Some(error),
                 group_by_key: row.group_by_key,
                 resources: Vec::new(),
+                row_num,
             });
         }
 
-        let row_num = builders::field(&row.record, "rowNum")
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or_default();
         let row_meta =
             meta::meta_for_row(&self.meta, row_num, dispatch::source_record_id(&row.record));
 
@@ -213,11 +215,13 @@ impl<R: Read + Seek> Iterator for Convert<'_, R> {
                     exception: None,
                     group_by_key: row.group_by_key,
                     resources,
+                    row_num,
                 },
                 Err(error) => ConvertedRow {
                     exception: Some(error),
                     group_by_key: row.group_by_key,
                     resources: Vec::new(),
+                    row_num,
                 },
             },
         )

@@ -8,7 +8,13 @@ use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
+use std::cell::RefCell;
 use std::sync::Arc;
+
+thread_local! {
+    /// File and column pairs already reported as leaving values unmapped.
+    static REPORTED_UNMAPPED: RefCell<HashSet<(String, String)>> = RefCell::new(HashSet::new());
+}
 
 pub const LIST_SEPARATOR: char = '|';
 
@@ -596,13 +602,48 @@ fn map_codes(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result
         }
         let mapping = resolve_map(mapping, "map_codes", "code_map")?;
         let mut values = Vec::with_capacity(batch.row_count);
+        let mut unmapped: Vec<String> = Vec::new();
         for row in 0..batch.row_count {
             let value = cell(batch, column, row);
+            if let Some(value) = value {
+                if !mapping.contains_key(value) && !mapping.contains_key("default") {
+                    unmapped.push(value.to_string());
+                }
+            }
             values.push(mapped_value(&mapping, value, value));
         }
+        report_unmapped(batch, column, unmapped);
         set_column(batch, column, values);
     }
     Ok(())
+}
+
+/// Warns once per file and column about values the code map passes through unchanged.
+fn report_unmapped(batch: &RecordBatch, column: &str, mut unmapped: Vec<String>) {
+    if unmapped.is_empty() {
+        return;
+    }
+    unmapped.sort();
+    unmapped.dedup();
+    let file = cell(batch, "filePath", 0).unwrap_or_default().to_string();
+    let first_time =
+        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().insert((file.clone(), column.to_string())));
+    if !first_time {
+        return;
+    }
+    let shown: Vec<&str> = unmapped.iter().take(5).map(String::as_str).collect();
+    let rest = unmapped.len().saturating_sub(shown.len());
+    let more = if rest > 0 {
+        format!(" and {rest} more")
+    } else {
+        String::new()
+    };
+    tracing::warn!(
+        file = %file,
+        column,
+        "code map leaves values unchanged: {}{more}",
+        shown.join(", ")
+    );
 }
 
 fn rename_columns(batch: &mut RecordBatch, params: &HashMap<String, Value>) -> Result<(), Error> {
@@ -947,6 +988,7 @@ fn read_secondary(
 #[cfg(test)]
 mod tests {
     use crate::reader::RecordBatch;
+    use crate::task_library::REPORTED_UNMAPPED;
     use crate::tasks::{execute_task_chain, TaskRegistry};
     use serde_json::{json, Value};
     use std::collections::HashMap;
@@ -1206,6 +1248,49 @@ mod tests {
             column(&data, "birthDate"),
             vec![Some("1980-01-02".into()), Some("bad".into()), None]
         );
+    }
+
+    #[test]
+    fn map_codes_reports_values_it_leaves_unchanged_once_per_file_and_column() {
+        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[
+            ("sex", &[Some("M"), Some("Z")]),
+            ("filePath", &[Some("a.csv"), Some("a.csv")]),
+        ]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male"}}}),
+        );
+
+        assert_eq!(
+            column(&data, "sex"),
+            vec![Some("male".into()), Some("Z".into())]
+        );
+        let reported = REPORTED_UNMAPPED.with(|seen| seen.borrow().len());
+        assert_eq!(reported, 1);
+
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male"}}}),
+        );
+        let repeated = REPORTED_UNMAPPED.with(|seen| seen.borrow().len());
+        assert_eq!(repeated, 1, "a second chunk must not add a second report");
+    }
+
+    #[test]
+    fn map_codes_stays_quiet_when_the_map_has_a_default() {
+        REPORTED_UNMAPPED.with(|seen| seen.borrow_mut().clear());
+        let mut data = batch(&[("sex", &[Some("Z")]), ("filePath", &[Some("b.csv")])]);
+        run(
+            &mut data,
+            "map_codes",
+            json!({"code_map": {"sex": {"M": "male", "default": "unknown"}}}),
+        );
+
+        assert_eq!(column(&data, "sex"), vec![Some("unknown".into())]);
+        assert!(REPORTED_UNMAPPED.with(|seen| seen.borrow().is_empty()));
     }
 
     #[test]

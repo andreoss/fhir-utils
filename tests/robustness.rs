@@ -109,3 +109,38 @@ fn a_latin_one_input_names_the_file_and_the_re_encoding_fix() {
     assert!(message.contains("iconv"), "{message}");
     assert!(message.contains("patient.csv"), "{message}");
 }
+
+#[test]
+fn rows_that_build_no_resource_are_counted_and_named() {
+    let base = TempDir::new().unwrap();
+    fs::create_dir_all(base.path().join("input")).unwrap();
+    fs::create_dir_all(base.path().join("config")).unwrap();
+    fs::write(
+        base.path().join("config/data-contract.json"),
+        r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live"},
+            "fileDefinitions": {"labs": {"fileType": "csv", "resourceType": "Observation",
+                "groupByKey": "mrn"}}}"#,
+    )
+    .unwrap();
+    fs::write(
+        base.path().join("input/labs.csv"),
+        "mrn,observationCode\n111,2160-0\n222,\n333,\n",
+    )
+    .unwrap();
+
+    let output = base.path().join("out");
+    let summary = convert(base.path(), &output);
+    assert_eq!(summary.rows, 3);
+    assert_eq!(summary.resources, 1);
+    assert_eq!(summary.empty_rows, 2);
+
+    let strict = run_convert(
+        &ConvertRequest::directory(base.path().to_path_buf(), base.path().join("strict")).strict(),
+    );
+    let message = match strict {
+        Ok(summary) => panic!("expected a failure, got {summary:?}"),
+        Err(error) => error.to_string(),
+    };
+    assert!(message.contains("2 of 3 rows"), "{message}");
+    assert!(message.contains("rows 2, 3"), "{message}");
+}
