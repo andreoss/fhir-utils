@@ -17,6 +17,9 @@ pub struct General {
     pub empty_field_values: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub regex_filenames: bool,
+    /// Any further key of the general block, injected as a row constant.
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -24,7 +27,7 @@ fn is_false(b: &bool) -> bool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FileDefinition {
     #[serde(rename = "fileType")]
     pub file_type: FileType,
@@ -186,9 +189,9 @@ fn resolve_definition(raw: &serde_json::value::RawValue) -> Result<FileDefinitio
     match serde_json::from_str::<String>(raw.get()) {
         Ok(source) => {
             let content = crate::opener::read_to_string(&source)?;
-            Ok(serde_json::from_str(without_bom(&content))?)
+            serde_json::from_str(without_bom(&content)).map_err(|error| explain(&error.to_string()))
         }
-        Err(_) => Ok(serde_json::from_str(raw.get())?),
+        Err(_) => serde_json::from_str(raw.get()).map_err(|error| explain(&error.to_string())),
     }
 }
 
@@ -222,9 +225,44 @@ const KNOWN_TASKS: &[&str] = &[
     "validate_value",
 ];
 
+/// Serde messages for the untagged contract enums, restated in contract terms.
+const ENUM_HINTS: &[(&str, &str)] = &[
+    (
+        "SkipRows",
+        "skiprows must be a line number or a list of line numbers",
+    ),
+    (
+        "Headers",
+        "headers must be a list of column names, a list of name and width objects, \
+         or an object of name to width",
+    ),
+    (
+        "RawDefinition",
+        "a file definition must be an object or the name of a definition file",
+    ),
+];
+
+/// Turns a JSON parse failure into a message a contract author can act on.
+fn explain(message: &str) -> Error {
+    for (name, hint) in ENUM_HINTS {
+        if message.contains(&format!("untagged enum {name}")) {
+            let location = message
+                .rfind(" at line ")
+                .map(|at| &message[at..])
+                .unwrap_or("");
+            return Error::Config(format!("{hint}{location}"));
+        }
+    }
+    if message.starts_with("unknown field") || message.starts_with("missing field") {
+        return Error::Config(format!("contract key error: {message}"));
+    }
+    Error::Config(format!("contract is not valid JSON: {message}"))
+}
+
 impl Contract {
     pub fn load(json: &str) -> Result<Self, Error> {
-        let raw: RawContract = serde_json::from_str(without_bom(json))?;
+        let raw: RawContract =
+            serde_json::from_str(without_bom(json)).map_err(|error| explain(&error.to_string()))?;
         let mut file_definitions = HashMap::new();
         for (matcher, definition) in raw.file_definitions {
             file_definitions.insert(matcher, resolve_definition(definition)?);
@@ -235,6 +273,11 @@ impl Contract {
             file_definitions,
         };
         contract.validate()?;
+        if contract.file_definitions.is_empty() {
+            return Err(Error::Config(
+                "fileDefinitions is required and must name at least one file".into(),
+            ));
+        }
         Ok(contract)
     }
 
@@ -600,5 +643,68 @@ mod lint_tests {
         )
         .unwrap();
         assert!(contract.lint().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod maintenance_tests {
+    use crate::contract::Contract;
+
+    fn load(body: &str) -> Result<Contract, crate::error::Error> {
+        Contract::load(&format!(
+            r#"{{"general": {{"timeZone": "UTC", "tenantId": "t1", "streamType": "live"}}, {body}}}"#
+        ))
+    }
+
+    #[test]
+    fn a_contract_without_file_definitions_is_rejected() {
+        let message = load(r#""fileDefinition": {}"#).unwrap_err().to_string();
+        assert!(message.contains("fileDefinitions is required"), "{message}");
+    }
+
+    #[test]
+    fn an_unknown_definition_key_is_rejected() {
+        let message = load(
+            r#""fileDefinitions": {"p": {"fileType": "csv", "resourceType": "Patient",
+                "groupByKey": "mrn", "skipRows": [0]}}"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(message.contains("contract key error"), "{message}");
+        assert!(message.contains("skipRows"), "{message}");
+        assert!(message.contains("skiprows"), "{message}");
+    }
+
+    #[test]
+    fn a_wrong_skiprows_type_names_what_it_accepts() {
+        let message = load(
+            r#""fileDefinitions": {"p": {"fileType": "csv", "resourceType": "Patient",
+                "groupByKey": "mrn", "skiprows": "three"}}"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(message.contains("line number or a list"), "{message}");
+    }
+
+    #[test]
+    fn further_general_keys_are_kept_for_injection() {
+        let contract = load(
+            r#""fileDefinitions": {"p": {"fileType": "csv", "resourceType": "Patient",
+                "groupByKey": "mrn"}}"#,
+        )
+        .unwrap();
+        assert!(contract.general.extra.is_empty());
+
+        let contract = Contract::load(
+            r#"{"general": {"timeZone": "UTC", "tenantId": "t1", "streamType": "live",
+                    "sourceSystem": "epic"},
+                "fileDefinitions": {"p": {"fileType": "csv", "resourceType": "Patient",
+                    "groupByKey": "mrn"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            contract.general.extra.get("sourceSystem"),
+            Some(&serde_json::json!("epic"))
+        );
     }
 }

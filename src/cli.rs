@@ -3,7 +3,7 @@ use crate::contract::Contract;
 use crate::converter::{convert, ConversionOptions};
 use crate::error::Error;
 use crate::fhirutils::constants;
-use crate::lookup::lookup_file_definition;
+use crate::lookup::matched_definition;
 use crate::opener::{self, LocalOpener, Opener};
 use crate::tasks::TaskRegistry;
 use serde_json::Value;
@@ -180,14 +180,20 @@ pub fn run_convert(request: &ConvertRequest) -> Result<ConvertSummary, Error> {
 
     for input in inputs {
         let stem = file_stem(&input);
-        let file_def = match lookup_file_definition(&contract, &stem) {
-            Ok(file_def) => file_def,
+        let (matcher, file_def) = match matched_definition(&contract, &stem) {
+            Ok(found) => found,
             Err(_) => {
                 info!(file = %input.display(), "no file definition matched");
                 summary.skipped_files.push(file_name(&input));
                 continue;
             }
         };
+        info!(
+            file = %input.display(),
+            definition = matcher,
+            resource_type = file_def.resource_type,
+            "file definition matched"
+        );
 
         let file_path = input.to_string_lossy().to_string();
         let options = ConversionOptions {

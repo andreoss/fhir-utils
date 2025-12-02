@@ -130,7 +130,8 @@ outside that list travels through the pipeline but never reaches the resource.
 | `fileDefinitions.<key>.tasks` | ordered tasks appended after the default chain | no
 |===
 
-- Every `general` key is injected into each row as a constant.
+- Every `general` key is injected into each row as a constant, including keys beyond the
+  ones listed above, so a contract can carry its own values into tasks.
 - A key matches when it is a substring of the input file name without its extension;
   longest key first, then alphabetically.
 - Fixed-width files need a width form of `headers`; otherwise the first remaining line
@@ -209,7 +210,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
   `source_value` and `target_value` columns; a `null` or empty target clears the cell.
 - A value the code map does not list passes through unchanged, which is reported once per
   file and column; add a `default` entry to control it.
-- Unknown tasks and unknown or missing parameters are rejected when the contract loads.
+- Unknown tasks and unknown or missing parameters are rejected when the contract loads,
+  as is an unknown key inside a file definition or a missing `fileDefinitions` block.
 - A task target that neither a later task nor the resource reads is reported by
   `validate` and warned about during `convert`; `--strict` makes it fail the run. It
   catches a misspelled field name, which otherwise drops the value silently.
@@ -230,8 +232,8 @@ per `general` key plus `filePath` and `configResourceType`. User tasks run after
   reload creates new ids; the `urn:id:extID` identifier and the `urn:id:source-file-id`
   extension, which carries `<file>:<rowNum>`, stay stable and are the keys to match on.
 - The summary goes to standard output; warnings and errors go to standard error.
-- Warnings print by default; `RUST_LOG=info` adds a line per file with its row and
-  resource counts, which is the only progress signal on a long run.
+- Warnings print by default; `RUST_LOG=info` adds a line per file naming the definition
+  that matched it and, once converted, its row and resource counts.
 
 == Required field defaults
 
@@ -259,7 +261,7 @@ not carry clinical meaning.
 [cols="1,2"]
 |===
 | Class | Behaviour
-| Contract or validation error | run stops
+| Contract or validation error | run stops naming the key or the accepted values
 | Missing file definition | file skipped
 | Task failure | warning, pipeline continues; fatal with `--strict`
 | Task target no field reads | warning at load; fatal with `--strict`
